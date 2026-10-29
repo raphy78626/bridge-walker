@@ -1,7 +1,8 @@
 // Every message is a small JSON object with a type field `t`.
-// phone → tv: tilt {v}, walk {on}, run {on}, jump, camera (cycle the view), start
-// tv → phone: state {phase, lives, level}      server → client: room {room}, paired, peer-left, error {reason}
-export const RELAYED = new Set(['tilt', 'walk', 'run', 'jump', 'camera', 'start', 'state']);
+// phone → tv: tilt {v}, walk {on}, run {on}, jump, camera (cycle the view), pause (toggle), volume {music, sfx}, start
+// tv → phone: state {phase, lives, level, ...}      server → client: room {room}, paired, peer-left, error {reason}
+export const RELAYED = new Set(['tilt', 'walk', 'run', 'jump', 'camera', 'pause', 'volume', 'start', 'state']);
+const unit = (v) => Math.max(0, Math.min(1, v));
 const SERVER_TYPES = new Set(['room', 'paired', 'peer-left', 'error']);
 const ROOM_RE = /^[A-Z]{4}$/;
 
@@ -33,6 +34,10 @@ export function decode(raw) {
       return { t: 'jump' };
     case 'camera':
       return { t: 'camera' };
+    case 'pause':
+      return { t: 'pause' };
+    case 'volume':
+      return Number.isFinite(msg.music) && Number.isFinite(msg.sfx) ? { t: 'volume', music: unit(msg.music), sfx: unit(msg.sfx) } : null;
     case 'start':
       return { t: 'start' };
     case 'state':

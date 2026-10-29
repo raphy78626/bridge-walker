@@ -42,7 +42,7 @@ describe('protocol', () => {
   });
 
   it('only relays gameplay messages between peers', () => {
-    expect([...RELAYED].sort()).toEqual(['camera', 'jump', 'run', 'start', 'state', 'tilt', 'walk']);
+    expect([...RELAYED].sort()).toEqual(['camera', 'jump', 'pause', 'run', 'start', 'state', 'tilt', 'volume', 'walk']);
   });
 
   it('validates run: needs a boolean on', () => {
@@ -55,6 +55,18 @@ describe('protocol', () => {
 
   it('strips extra fields from run', () => {
     expect(decode(encode({ t: 'run', on: true, evil: 1 }))).toEqual({ t: 'run', on: true });
+  });
+
+  it('accepts pause (toggle) and strips any fields', () => {
+    expect(decode(encode({ t: 'pause' }))).toEqual({ t: 'pause' });
+    expect(decode(encode({ t: 'pause', x: 1 }))).toEqual({ t: 'pause' });
+  });
+
+  it('accepts volume with music and sfx clamped to 0..1, and rejects non-numbers', () => {
+    expect(decode(encode({ t: 'volume', music: 0.4, sfx: 1 }))).toEqual({ t: 'volume', music: 0.4, sfx: 1 });
+    expect(decode(encode({ t: 'volume', music: 7, sfx: -2 }))).toEqual({ t: 'volume', music: 1, sfx: 0 });
+    expect(decode(encode({ t: 'volume', music: 'loud', sfx: 1 }))).toBeNull();
+    expect(decode(encode({ t: 'volume', music: 0.5 }))).toBeNull();
   });
 
   it('accepts camera (cycle the view) and strips any fields', () => {

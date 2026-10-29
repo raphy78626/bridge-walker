@@ -33,6 +33,11 @@ export function createSession({ seed = 1 } = {}) {
     forecast: calmForecast(),
     // jump is a one-shot: the TV sets it true, the next update() consumes it.
     input: { tilt: 0, walking: false, running: false, jump: false },
+    paused: false, // the phone's pause button; only during play, and it freezes everything (timer, wind, walker)
+
+    togglePause() {
+      if (s.phase === 'playing') s.paused = !s.paused;
+    },
 
     start() {
       if (s.phase === 'playing' || s.phase === 'falling') return;
@@ -47,6 +52,7 @@ export function createSession({ seed = 1 } = {}) {
       s.levelFalls = 0;
       s.parTime = d.parTime;
       s.result = null;
+      s.paused = false;
       instability = d.instability;
       s.walker = createWalker();
       s.gaps = generateGaps(seed, s.level, BRIDGE_LENGTH);
@@ -56,9 +62,10 @@ export function createSession({ seed = 1 } = {}) {
     },
 
     update(dt) {
-      s.phaseTime += dt;
       const jump = s.input.jump;
       s.input.jump = false; // consumed whether or not a jump could happen
+      if (s.paused) return;
+      s.phaseTime += dt;
       if (s.phase === 'playing') {
         s.time += dt;
         const { tilt, walking, running } = s.input;
