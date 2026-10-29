@@ -11,7 +11,7 @@ const PLANK_DEPTH = 0.32; // along the bridge
 const TEX_M = 9; // metres of rock covered by one tile of the rock texture
 const noise = new ImprovedNoise();
 
-// Sky, rock, bridge, clouds, waterfalls and birds. `update(t, camera)` (t in seconds) drifts the clouds, scrolls the water,
+// Sky, rock, bridge, clouds, waterfalls and birds. `update(t, camera)` (t in game seconds: the scene's clock, which stands still in a pause) drifts the clouds, scrolls the water,
 // flies the birds and keeps the stars centred on the camera.
 // `theme` (themes.js) gives the first look; `setTheme(theme)` swaps it later (sky, fog, rock lighting, clouds, water, extras).
 // lite: a cheaper variant for TV GPUs, from profiling on an LG TV (PowerVR BXE-4-32): unlit rock with
