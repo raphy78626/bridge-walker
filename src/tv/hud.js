@@ -16,8 +16,11 @@ const distText = (metres) => `${metres} / ${BRIDGE_LENGTH} m`;
 const livesText = (lives) => `❤ ${lives}`;
 const scoreText = (runScore) => (Number.isFinite(runScore) ? `${formatScore(runScore)} pts` : '');
 
+// Paused shows its own panel (the scene dimmed behind a card), not a line of text across the soldier and the bridge.
+export const pausedOf = (s) => !!s && !!s.paused && s.phase === 'playing';
+
 export function messageFor(s) {
-  if (s.paused && s.phase === 'playing') return 'PAUSED — tap ▶ on your phone to resume';
+  if (pausedOf(s)) return '';
   switch (s.phase) {
     case 'lobby':
       return 'Press START on your phone';
@@ -98,6 +101,9 @@ export function createHud(doc = document, timers = globalThis) {
     if (shown[id] === on) return;
     shown[id] = on;
     $(id).hidden = !on;
+  }
+  function syncPause(on) {
+    syncKeepMoving('pause', on);
   }
   function syncWind(forecast) {
     const wind = windIndicator(forecast);
@@ -221,9 +227,9 @@ export function createHud(doc = document, timers = globalThis) {
       }
       setText('race-round', v.roundLine);
     },
-    // The race's centre message (only the pause: the lobby and the results have their own panels).
+    // The race's pause panel (the lobby and the results have their own panels).
     renderRaceMessage(match) {
-      setText('message', match.paused && match.phase === 'playing' ? messageFor({ paused: true, phase: 'playing' }) : '');
+      syncPause(pausedOf(match));
     },
     // Wind Master: the roles strip, the round line and the gust bar. `rounds` is the match's length.
     renderWindMaster(match, rounds) {
@@ -300,6 +306,7 @@ export function createHud(doc = document, timers = globalThis) {
       $('balance-needle').style.left = `${50 + 50 * balance}%`;
       $('balance').classList.toggle('danger', Math.abs(balance) > 0.7);
       setText('message', s.result ? '' : messageFor(s)); // the results panel says it all
+      syncPause(pausedOf(s));
       const hint = gapHint(s);
       if (hint !== shownHint) {
         shownHint = hint;

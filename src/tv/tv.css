@@ -487,3 +487,24 @@ html, body {
   text-align: center;
   animation: gap-pulse 0.35s ease-in-out infinite alternate;
 }
+
+/* Paused: the scene dimmed behind a card in the middle (no blur: a backdrop filter is costly on the TV's GPU). */
+#pause {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 12, 18, 0.55);
+}
+#pause[hidden] { display: none; }
+.pause-card {
+  padding: 4vh 8vh;
+  border-radius: 2.4vh;
+  background: rgba(20, 26, 34, 0.9);
+  box-shadow: 0 1vh 5vh rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+.pause-icon { font-size: 8vh; line-height: 1; opacity: 0.9; }
+.pause-title { margin-top: 1.4vh; font-size: 7vh; font-weight: 900; letter-spacing: 0.12em; }
+.pause-hint { margin-top: 1.2vh; font-size: 3.4vh; font-weight: 600; opacity: 0.85; }

@@ -11,7 +11,7 @@ vi.mock('../src/game/session.js', async (importOriginal) => {
   return { ...real, distanceToNextGap: real.distanceToNextGap ?? stub };
 });
 
-const { formatTime, messageFor, createHud, gapHint } = await import('../src/tv/hud.js');
+const { formatTime, messageFor, createHud, gapHint, pausedOf } = await import('../src/tv/hud.js');
 
 describe('hud text', () => {
   it('formats the timer as mm:ss', () => {
@@ -23,7 +23,7 @@ describe('hud text', () => {
   it('shows a message for each phase', () => {
     expect(messageFor({ phase: 'lobby' })).toBe('Press START on your phone');
     expect(messageFor({ phase: 'playing' })).toBe('');
-    expect(messageFor({ phase: 'playing', paused: true })).toBe('PAUSED — tap ▶ on your phone to resume');
+    expect(messageFor({ phase: 'playing', paused: true })).toBe(''); // the pause panel says it, not a line across the scene
     expect(messageFor({ phase: 'falling', lives: 1 })).toBe('You fell! 1 life left');
     expect(messageFor({ phase: 'falling', lives: 2 })).toBe('You fell! 2 lives left');
     expect(messageFor({ phase: 'falling', lives: 0 })).toBe('You fell!');
@@ -277,5 +277,14 @@ describe('wind indicator, timer, score and results panel', () => {
     expect(r.doc.els.message.textContent).toBe('You crossed! Press START for level 2');
     hud.render(state({ phase: 'won', result: { kind: 'level', level: 1 } }));
     expect(r.doc.els.message.textContent).toBe('');
+  });
+});
+
+describe('pausedOf', () => {
+  it('is on only while a level is paused mid-play (a session or a match)', () => {
+    expect(pausedOf({ phase: 'playing', paused: true })).toBe(true);
+    expect(pausedOf({ phase: 'playing', paused: false })).toBe(false);
+    expect(pausedOf({ phase: 'won', paused: true })).toBe(false);
+    expect(pausedOf(null)).toBe(false);
   });
 });
