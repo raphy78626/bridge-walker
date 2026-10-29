@@ -144,6 +144,50 @@ html, body {
 .ctl:active, .ctl.down { filter: brightness(0.75); transform: scale(0.98); }
 .ctl:focus-visible, .big:focus-visible, .link:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 
+/* Two players: a badge in the player's colour (the TV uses the same two), the game-mode picker in the lobby, and the Wind
+   Master's two GUST buttons in place of WALK / RUN / JUMP. */
+.statusrow { display: flex; align-items: center; justify-content: center; gap: 8px; max-width: 100%; }
+.statusrow p { text-align: left; min-width: 0; }
+.badge {
+  flex: none;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font: 800 0.85rem/1.2 system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  color: #10161d;
+  background: #19b5a5;
+}
+.badge.p1 { background: #19b5a5; }
+.badge.p2 { background: #f5882f; }
+.modes { display: flex; gap: 6px; justify-content: center; max-width: 100%; }
+.modes[hidden] { display: none; }
+.mode {
+  border: 1px solid #8fb3cc;
+  border-radius: 999px;
+  background: transparent;
+  color: #e8eef3;
+  font-size: 0.85rem;
+  padding: 6px 12px;
+  touch-action: manipulation;
+  white-space: nowrap;
+}
+.mode[aria-pressed='true'] { background: #e8eef3; border-color: #e8eef3; color: #10161d; font-weight: 700; }
+.mode:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.ctl[hidden] { display: none; }
+.gust { background: #7fd1f0; color: #10161d; font-size: 1.9rem; position: relative; overflow: hidden; }
+.gust.cooling { filter: grayscale(0.7) brightness(0.55); }
+.gust.cooling:active, .gust.cooling.down { filter: grayscale(0.7) brightness(0.45); transform: none; }
+.gust-cool { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 800; letter-spacing: 0.1em; color: #7fd1f0; }
+.gust-cool[hidden] { display: none; }
+.gust-cool .ring { width: 28px; height: 28px; transform: rotate(-90deg); flex: none; }
+.gust-cool circle { fill: none; stroke-width: 4; }
+.gust-cool .track { stroke: rgba(143, 179, 204, 0.3); }
+.gust-cool .arc { stroke: #7fd1f0; stroke-linecap: round; stroke-dasharray: 94.25; stroke-dashoffset: 0; }
+.gust-cool.cooling { color: #8fb3cc; }
+.gust-cool.cooling .arc { stroke: #8fb3cc; animation: gust-ring var(--cooldown, 3.3s) linear forwards; }
+@keyframes gust-ring { from { stroke-dashoffset: 94.25; } to { stroke-dashoffset: 0; } }
+.play.windmaster .meter { visibility: hidden; }
+
 /* Held upright by mistake: controls on top, thumbs side by side underneath. */
 @media (orientation: portrait) {
   .play { grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; }

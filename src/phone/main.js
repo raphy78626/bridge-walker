@@ -1,7 +1,10 @@
 import { connect } from '../shared/client.js';
 import { createTiltReader } from './tilt.js';
 import { createGustTrigger, strengthOfLevel, windIndicator } from '../tv/windFx.js'; // pure helpers, no three.js
-import { statusText } from './status.js';
+import { statusText, viewOf, startLabel } from './status.js';
+import { PLAYER_COLORS } from '../shared/players.js';
+import { GUST_COOLDOWN_S, CONTROLLED_GUST_S } from '../game/wind.js';
+import { WIND_WARNING_S } from '../game/forecast.js';
 
 const SIGN_KEY = 'bridge.tiltSign';
 
@@ -13,6 +16,10 @@ let net = null;
 let calibStep = 'zero';
 let sender = null;
 let motionListening = false;
+let me = 1; // this phone's player slot, given by the server at pairing (the TV's `you` can correct it)
+let windMaster = false; // the play screen shows the two GUST buttons instead of WALK / RUN / JUMP
+let wasReady = true; // gustReady as last seen, to start the cooldown ring when it turns false
+const GUST_RING_S = Math.max(GUST_COOLDOWN_S, WIND_WARNING_S + CONTROLLED_GUST_S); // what the TV's gustReady takes to return
 
 function loadSign() {
   try {
@@ -86,22 +93,80 @@ $('btn-connect').addEventListener('click', async () => {
 
 function onMessage(msg) {
   if (msg.t === 'paired') {
+    me = msg.player === 2 ? 2 : 1;
+    showBadge(me);
     sendVolume(); // a freshly started TV app plays at full volume until it hears the saved levels
     startCalibration();
   } else if (msg.t === 'error') {
     showProblem(
-      msg.reason === 'no-room' ? 'Room not found — rescan the QR code.' : 'Another phone took over.',
+      msg.reason === 'no-room'
+        ? 'Room not found — rescan the QR code.'
+        : msg.reason === 'room-full'
+          ? 'Two phones are already playing — ask one to leave.'
+          : 'Another phone took over.',
     );
   } else if (msg.t === 'peer-left') {
     showProblem('TV disconnected — scan the new QR code on the TV');
   } else if (msg.t === 'state') {
-    $('status').textContent = statusText(msg);
+    const view = viewOf(msg, me);
+    me = view.player;
+    showBadge(me);
+    showRole(view);
+    $('status').textContent = statusText(msg, me);
     showWind(msg);
-    $('btn-start').hidden = msg.phase === 'playing' || msg.phase === 'falling';
+    $('btn-start').hidden = !view.idle;
+    $('btn-start').textContent = startLabel(msg);
+    $('modes').hidden = !view.idle;
+    for (const b of document.querySelectorAll('.mode')) b.setAttribute('aria-pressed', String(b.dataset.mode === view.mode));
     $('btn-pause').hidden = msg.phase !== 'playing';
     $('btn-pause').textContent = msg.paused ? '▶ Resume' : '⏸ Pause';
     if (msg.phase === 'falling') navigator.vibrate?.(300);
   }
+}
+
+function showBadge(player) {
+  const el = $('badge');
+  el.textContent = `P${player}`;
+  el.className = `badge p${player}`;
+  el.style.background = PLAYER_COLORS[player];
+  el.setAttribute('aria-label', `You are player ${player}`);
+}
+
+// The Wind Master has no soldier to steer: two big GUST buttons replace WALK, RUN and JUMP, and a ring counts down the
+// cooldown between gusts (gustReady from the TV). A walker or racer, or a TV that sends none of this, gets the usual pads.
+function showRole(view) {
+  if (view.windMaster !== windMaster) {
+    windMaster = view.windMaster;
+    releaseAll(); // a finger still on WALK when the roles swap must not leave the old walker walking
+    $('screen-play').classList.toggle('windmaster', windMaster);
+    for (const id of ['btn-walk', 'btn-run', 'btn-jump']) $(id).hidden = windMaster;
+    for (const id of ['btn-gust-left', 'btn-gust-right']) $(id).hidden = !windMaster;
+    $('gust-cool').hidden = !windMaster;
+    wasReady = true;
+  }
+  if (!windMaster) return;
+  const ready = view.gustReady && !view.idle;
+  $('btn-gust-left').classList.toggle('cooling', !ready);
+  $('btn-gust-right').classList.toggle('cooling', !ready);
+  const cool = $('gust-cool');
+  if (view.idle) {
+    cool.classList.remove('cooling');
+    cool.classList.add('ready');
+    $('gust-state').textContent = 'GUSTS START WITH THE ROUND';
+    wasReady = true;
+    return;
+  }
+  if (!ready && wasReady) {
+    cool.classList.remove('ready', 'cooling');
+    void cool.getBoundingClientRect(); // restart the ring from empty
+    cool.style.setProperty('--cooldown', `${GUST_RING_S}s`);
+    cool.classList.add('cooling');
+  } else if (ready) {
+    cool.classList.remove('cooling');
+    cool.classList.add('ready');
+  }
+  $('gust-state').textContent = ready ? 'GUST READY' : 'WAIT…';
+  wasReady = ready;
 }
 
 // A small arrow next to the balance meter while a gust is coming or blowing, sized and buzzing by the gust's strength
@@ -156,14 +221,19 @@ function enterPlay() {
 }
 
 // A button that is "on" while a finger is on it. Sends on every change, never twice in a row.
+const releases = [];
+function releaseAll() {
+  for (const release of releases) release();
+}
 function holdButton(el, send) {
   let held = false;
-  const set = (on) => {
+  releases.push(() => set(false));
+  function set(on) {
     if (held === on) return;
     held = on;
     el.classList.toggle('down', on);
     send(on);
-  };
+  }
   el.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     set(true);
@@ -186,6 +256,22 @@ for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
   jumpBtn.addEventListener(ev, () => jumpBtn.classList.remove('down'));
 }
 jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+// The Wind Master's buttons: a tap sends a gust, left (-1) or right (+1). The TV refuses one during the cooldown.
+for (const [id, dir] of [['btn-gust-left', -1], ['btn-gust-right', 1]]) {
+  const btn = $(id);
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    btn.classList.add('down');
+    navigator.vibrate?.(30);
+    net?.send({ t: 'gust', dir });
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) btn.addEventListener(ev, () => btn.classList.remove('down'));
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+// Lobby: pick solo, race or Wind Master. The TV only acts on it between rounds, and its next state says what it chose.
+for (const btn of document.querySelectorAll('.mode')) {
+  btn.addEventListener('click', () => net?.send({ t: 'mode', mode: btn.dataset.mode }));
+}
 $('btn-start').addEventListener('click', () => net?.send({ t: 'start' }));
 $('btn-camera').addEventListener('click', () => net?.send({ t: 'camera' })); // the TV cycles chase → POV → cinematic
 $('btn-pause').addEventListener('click', () => net?.send({ t: 'pause' })); // a toggle; the TV's state says which

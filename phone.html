@@ -23,15 +23,28 @@
       <div class="pad pad-left">
         <button id="btn-walk" class="ctl walk" type="button" aria-label="Walk. Press and hold to walk.">WALK</button>
         <button id="btn-run" class="ctl run" type="button" aria-label="Run. Press and hold to run fast.">RUN</button>
+        <button id="btn-gust-left" class="ctl gust" type="button" aria-label="Gust to the left. Pushes the walker to the left." hidden><span class="gust-label">← GUST</span></button>
       </div>
       <div class="centre">
-        <p id="status" role="status">Connected</p>
+        <div class="statusrow">
+          <span id="badge" class="badge p1" aria-label="You are player 1">P1</span>
+          <p id="status" role="status">Connected</p>
+        </div>
         <div class="meter-row">
           <span id="wind-left" class="wind-chip" hidden aria-hidden="true"><svg viewBox="0 0 120 48"><path d="M4 17h68V3l44 21-44 21V31H4z" /></svg></span>
           <div class="meter" role="img" aria-label="Balance meter. Tilt the phone to stay in the green."><div id="meter-needle"></div></div>
           <span id="wind-right" class="wind-chip" hidden aria-hidden="true"><svg viewBox="0 0 120 48"><path d="M116 17H48V3L4 24l44 21V31h68z" /></svg></span>
         </div>
         <p id="wind-text" class="wind-text" role="status" aria-live="polite"></p>
+        <div id="gust-cool" class="gust-cool ready" hidden>
+          <svg class="ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="track" cx="18" cy="18" r="15" /><circle class="arc" cx="18" cy="18" r="15" /></svg>
+          <span id="gust-state">GUST READY</span>
+        </div>
+        <div id="modes" class="modes" role="group" aria-label="Game mode" hidden>
+          <button type="button" class="mode" data-mode="solo" aria-pressed="true">Solo</button>
+          <button type="button" class="mode" data-mode="race" aria-pressed="false">Race</button>
+          <button type="button" class="mode" data-mode="windmaster" aria-pressed="false">Wind Master</button>
+        </div>
         <button id="btn-start" class="big" type="button">Start</button>
         <div class="row">
           <button id="btn-pause" class="view" type="button" hidden>⏸ Pause</button>
@@ -47,6 +60,7 @@
       </div>
       <div class="pad pad-right">
         <button id="btn-jump" class="ctl jump" type="button" aria-label="Jump. Tap to jump over a gap.">JUMP</button>
+        <button id="btn-gust-right" class="ctl gust" type="button" aria-label="Gust to the right. Pushes the walker to the right." hidden><span class="gust-label">GUST →</span></button>
       </div>
     </section>
 
