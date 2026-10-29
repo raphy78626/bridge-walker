@@ -15,12 +15,16 @@ export const STATUS = {
 const isPlayer = (n) => n === 1 || n === 2;
 
 export const KEEP_MOVING_TEXT = 'KEEP MOVING!';
+export const SPECTATOR_TEXT = 'Solo game in progress';
+export const SPECTATOR_WAITING_TEXT = 'Waiting for the other phone to start';
 
 // Should this phone warn "keep moving"? The TV sets msg.keepMoving while this phone's walker has stood still on the bridge
 // too long. Not for a Wind Master, who has no soldier (the walker's flag reaches both phones in that mode), and not while
 // paused or between plays.
 export function keepMovingFor(msg, me = 1) {
-  return msg.keepMoving === true && msg.phase === 'playing' && !msg.paused && !viewOf(msg, me).windMaster;
+  if (msg.keepMoving !== true || msg.phase !== 'playing' || msg.paused) return false;
+  const view = viewOf(msg, me);
+  return !view.windMaster && !view.spectator;
 }
 
 // True once per onset of the warning (not on every state message while he stands still): the phone buzzes then.
@@ -49,7 +53,9 @@ export function viewOf(msg, me = 1) {
   // The mode picker shows only when the TV says a change is allowed (not between the rounds of a match: it would wipe the
   // tally). A TV that sends no flag gets the old rule, the picker whenever Start shows.
   const canChangeMode = typeof msg.canChangeMode === 'boolean' ? msg.canChangeMode : idle;
-  return { mode, player, role, windMaster: role === 'windmaster', gustReady: msg.gustReady === true, idle, canChangeMode };
+  // In a solo game with two phones the TV steers by one of them and shows the other this line instead: a spectator.
+  const spectator = mode === 'solo' && msg.spectator === true;
+  return { mode, player, role, windMaster: role === 'windmaster', gustReady: msg.gustReady === true, idle, canChangeMode, spectator };
 }
 
 // The Start button's words: it always sends {t:'start'}, the TV decides what that begins.
@@ -96,6 +102,7 @@ export function roundResultText(msg, me = 1) {
 // at game over with the run score. A TV that does not send those fields gets the plain line.
 export function statusText(msg, me = 1) {
   const view = viewOf(msg, me);
+  if (view.spectator) return msg.phase === 'playing' || msg.phase === 'falling' ? SPECTATOR_TEXT : SPECTATOR_WAITING_TEXT;
   if (view.mode !== 'solo') return multiplayerText(msg, view);
   const tail = `❤ ${msg.lives} · Level ${msg.level}`;
   if (msg.paused && msg.phase === 'playing') return `Paused — tap ▶ to resume · ${tail}`;

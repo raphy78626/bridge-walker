@@ -119,6 +119,25 @@ describe('per-phone state for a match', async () => {
     expect(msg).toEqual({ ...buildStateMessage(m.sessions[1]), mode: 'solo', you: 2, role: 'walker', gustReady: false, canChangeMode: true, to: 2 });
   });
 
+  it('a solo spectator (the second phone) is flagged in its message, and only then', () => {
+    const m = createMatch({ mode: 'solo', seed: 4 });
+    expect(stateMessageFor(m, 2, { spectator: true })).toMatchObject({ spectator: true, to: 2, you: 2 });
+    expect('spectator' in stateMessageFor(m, 1)).toBe(false);
+    expect('spectator' in stateMessageFor(m, 2, { spectator: false })).toBe(false);
+    expect('spectator' in stateMessageFor(m, 2, {})).toBe(false);
+  });
+
+  it('the state sync sends again when a phone becomes a spectator, or stops being one', () => {
+    const m = createMatch({ mode: 'solo', seed: 4 });
+    const sync = createStateSync();
+    expect(sync.changed(m.sessions[1], m, false)).toBe(true);
+    expect(sync.changed(m.sessions[1], m, false)).toBe(false);
+    expect(sync.changed(m.sessions[1], m, true)).toBe(true); // the first phone came back: this one now only watches
+    expect(sync.changed(m.sessions[1], m, true)).toBe(false);
+    expect(sync.changed(m.sessions[1], m, false)).toBe(true);
+    expect(sync.changed(m.sessions[1], m)).toBe(false); // no argument means false
+  });
+
   it('each racer gets his own session, the windmaster modes the one walker', () => {
     const race = createMatch({ mode: 'race', seed: 4 });
     expect(sessionFor(race, 1)).toBe(race.sessions[1]);

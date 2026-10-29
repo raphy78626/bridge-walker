@@ -14,8 +14,10 @@ export const sessionFor = (match, player) => (match.mode === 'race' ? match.sess
 // What the TV sends one phone: its session's state, with the match's fields over it, aimed at that phone alone.
 // Solo adds only mode, you, role and gustReady, so the single-player message is the old one plus those.
 // In a match the lane session's own stars and score mean nothing to the phone (the round's result says who won), so they are left out.
-export function stateMessageFor(match, player) {
+// `spectator`: this phone is the second one in a solo game, which the TV does not steer by (matchLink.js): it is told so.
+export function stateMessageFor(match, player, { spectator = false } = {}) {
   const msg = { ...buildStateMessage(sessionFor(match, player)), ...matchStateFor(match, player), to: player };
+  if (spectator) msg.spectator = true;
   if (match.mode !== 'solo') {
     delete msg.stars;
     delete msg.score;
@@ -58,11 +60,11 @@ export function buildStateMessage(session) {
 // still 'playing'), the round, the tally, the scores, this racer's falls, the Wind Master's gust readiness and the result.
 export function createStateSync() {
   let phase, lives, level, paused, wind, windDir, windLevel, stars, score, runScore, keepMoving;
-  let mode, matchPhase, role, gustReady, round, tally1, tally2, scores1, scores2, falls, matchResult;
+  let mode, matchPhase, role, gustReady, round, tally1, tally2, scores1, scores2, falls, matchResult, watching;
   let seen = false;
   return {
     // True when anything the phone shows differs from the last message built. Updates what it compares against.
-    changed(session, match = null) {
+    changed(session, match = null, spectator = false) {
       const nextKeep = keepMovingOf(session);
       const nextMode = match ? match.mode : undefined;
       const nextMatchPhase = match && match.mode !== 'solo' ? match.phase : undefined;
@@ -107,7 +109,8 @@ export function createStateSync() {
         scores1 === nextS1 &&
         scores2 === nextS2 &&
         falls === nextFalls &&
-        matchResult === nextResult;
+        matchResult === nextResult &&
+        watching === spectator;
       phase = session.phase;
       lives = session.lives;
       level = session.level;
@@ -130,6 +133,7 @@ export function createStateSync() {
       scores2 = nextS2;
       falls = nextFalls;
       matchResult = nextResult;
+      watching = spectator;
       seen = true;
       return !same;
     },

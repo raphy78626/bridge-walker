@@ -4,7 +4,7 @@ import { createMatch, WINDMASTER_ROUNDS } from '../game/match.js';
 import { createScene } from './scene.js';
 import { createHud } from './hud.js';
 import { TILT_TIMEOUT_MS, phoneUrl, reconnectDelay } from './link.js';
-import { controlledPlayer, createPlayerGates, flowPhase, modeSwitch } from './matchLink.js';
+import { controlledPlayer, createPlayerGates, flowPhase, modeSwitch, routeInput } from './matchLink.js';
 import { lobbyView, pairingPanelVisible } from './matchHud.js';
 import { matchResultView } from './matchResults.js';
 import { RACE_VIEW_LABELS, windSessionOf } from './raceView.js';
@@ -21,6 +21,7 @@ const newMatch = (mode) => createMatch({ mode, seed: Date.now() % 100000 });
 let match = newMatch('solo'); // solo until a phone picks another mode (and replaced by a new match when it does)
 const hud = createHud();
 const links = createPlayerGates(TILT_TIMEOUT_MS); // which phones are here, and one controller gate per player
+let steering = links.controller; // which phone steers player 1 in solo (0: none; the two-player modes go by slot)
 const audio = createAudio();
 const soundCues = [createCueTracker(), createCueTracker()]; // a soldier each: a race has two
 const eagles = createEagleScheduler({ audio });
@@ -72,9 +73,18 @@ function createSceneOrStub() {
   }
 }
 
+// In solo one phone steers; when that changes (the first phone left, or came back), the walker must not keep the old
+// phone's held buttons.
+function rosterChanged() {
+  if (links.controller === steering) return;
+  steering = links.controller;
+  match.clearInput(1);
+}
+
 // No phone is paired any more: the game pauses and the last tilt/walk values are forgotten.
 function dropController() {
   links.leaveAll();
+  steering = links.controller;
   for (const p of [1, 2]) match.clearInput(p);
 }
 
@@ -83,6 +93,7 @@ function dropController() {
 function switchMode(mode) {
   match = newMatch(mode);
   links.setMode(mode, performance.now());
+  steering = links.controller;
   for (const p of [1, 2]) {
     stateSyncs[p].reset();
     soundCues[p - 1].reset();
@@ -154,10 +165,15 @@ async function onMessage(msg) {
       break;
     }
     case 'paired': {
+      // A phone paired, or came back and took its own slot over (server/rooms.js: same id, same player, no peer-left). Either
+      // way the old phone's held buttons are not this one's: whatever it steers starts from rest.
       const phone = msg.player === 2 ? 2 : 1;
       links.pair(phone, performance.now());
+      const steers = controlledPlayer(match.mode, phone, links.phones);
+      if (steers) match.clearInput(steers);
+      rosterChanged();
       stateSyncs[phone].reset();
-      pushState(phone);
+      pushStates(); // everyone: a second phone in a solo game is told it only watches
       updatePanel();
       startSound();
       break;
@@ -167,27 +183,21 @@ async function onMessage(msg) {
       if (msg.player === 1 || msg.player === 2) links.leave(msg.player, performance.now());
       else links.leaveAll();
       for (const p of [1, 2]) if (!links.gates[p].paired) match.clearInput(p);
+      rosterChanged();
+      pushStates(); // the phone left behind may now be the one that steers
       updatePanel();
       break;
     }
-    case 'tilt': {
-      const now = performance.now();
-      const player = links.tilt(phoneOf(msg), now);
-      if (links.gates[player].paired) match.input(player, msg);
-      break;
-    }
+    case 'tilt':
     case 'walk':
     case 'run':
-      match.input(controlledPlayer(match.mode, phoneOf(msg)), msg); // zeroed again by the loop if this phone's tilt goes quiet
-      break;
-    case 'jump': {
-      // One-shot: the session consumes it. Ignored unless the phone is live, like tilt and walking.
-      const player = controlledPlayer(match.mode, phoneOf(msg));
-      if (links.live(player, performance.now())) match.input(player, msg);
-      break;
-    }
+    case 'jump':
     case 'gust':
-      match.input(phoneOf(msg), msg); // the Wind Master's; the match refuses anyone else's, and one during the cooldown
+    case 'pause':
+    case 'start':
+      // matchLink.js's routing: in solo ONE phone steers (slot 1 if connected, else slot 2) and the other is ignored.
+      routeInput(match, links, msg, performance.now());
+      if (msg.t === 'start') startSound();
       break;
     case 'camera': {
       const view = scene.cycleCamera?.();
@@ -202,26 +212,17 @@ async function onMessage(msg) {
       if (next) switchMode(next);
       break;
     }
-    case 'start':
-      if (links.ready()) match.start(); // a race or a Wind Master round needs both phones
-      startSound();
-      break;
-    case 'pause':
-      if (links.live(controlledPlayer(match.mode, phoneOf(msg)), performance.now())) match.togglePause(); // the state sync tells the phones
-      break;
     case 'volume':
       audio.setVolumes(msg); // the phone remembers the levels and sends them again on every pairing
       break;
   }
 }
 
-// The slot a phone message came from (the server stamps every one with p).
-const phoneOf = (msg) => (msg.p === 2 ? 2 : 1);
-
 // Each paired phone gets its own message: its player's session, with the match's fields over it, aimed at it alone.
 function pushState(p) {
-  stateSyncs[p].changed(sessionFor(match, p), match); // the message below is the latest, so the loop need not send it again
-  net?.send(stateMessageFor(match, p));
+  const spectator = links.spectator(p);
+  stateSyncs[p].changed(sessionFor(match, p), match, spectator); // the message below is the latest, so the loop need not send it again
+  net?.send(stateMessageFor(match, p, { spectator }));
 }
 function pushStates() {
   for (const p of [1, 2]) if (links.phones[p]) pushState(p);
@@ -300,7 +301,10 @@ function frame(now) {
   }
   for (const p of [1, 2]) {
     // phase, lives, level, wind, result, and in a match its round, tally, scores and roles: on change only
-    if (links.phones[p] && stateSyncs[p].changed(sessionFor(match, p), match)) net?.send(stateMessageFor(match, p));
+    if (links.phones[p]) {
+      const spectator = links.spectator(p);
+      if (stateSyncs[p].changed(sessionFor(match, p), match, spectator)) net?.send(stateMessageFor(match, p, { spectator }));
+    }
   }
   const race = match.mode === 'race';
   // The wind the TV shows: the walker's, or in a race the one the view follows (raceView.js).

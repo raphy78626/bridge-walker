@@ -3,13 +3,13 @@ import { statusText, viewOf, startLabel, roundResultText, keepMovingFor, createK
 
 describe('viewOf', () => {
   it('behaves as solo when the two-player fields are missing', () => {
-    expect(viewOf({ phase: 'playing', lives: 3, level: 1 })).toEqual({ mode: 'solo', player: 1, role: 'walker', windMaster: false, gustReady: false, idle: false, canChangeMode: false });
+    expect(viewOf({ phase: 'playing', lives: 3, level: 1 })).toEqual({ mode: 'solo', player: 1, role: 'walker', windMaster: false, gustReady: false, idle: false, canChangeMode: false, spectator: false });
     expect(viewOf({ phase: 'lobby' }, 2)).toMatchObject({ mode: 'solo', player: 2, role: 'walker', idle: true });
   });
 
   it('ignores junk in the new fields', () => {
     expect(viewOf({ mode: 'coop', you: 7, role: 'windmaster', gustReady: 'yes', phase: 'playing' })).toEqual({
-      mode: 'solo', player: 1, role: 'walker', windMaster: false, gustReady: false, idle: false, canChangeMode: false,
+      mode: 'solo', player: 1, role: 'walker', windMaster: false, gustReady: false, idle: false, canChangeMode: false, spectator: false,
     });
   });
 
@@ -38,6 +38,37 @@ describe('the mode picker follows canChangeMode', () => {
     expect(viewOf({ phase: 'lobby' }).canChangeMode).toBe(true);
     expect(viewOf({ phase: 'playing' }).canChangeMode).toBe(false);
     expect(viewOf({ phase: 'roundOver', canChangeMode: 'yes' }).canChangeMode).toBe(true);
+  });
+});
+
+describe('the second phone in a solo game only watches', () => {
+  const watching = (o) => ({ mode: 'solo', phase: 'playing', lives: 3, level: 1, spectator: true, you: 2, ...o });
+
+  it('says "Solo game in progress" while the game runs (playing, falling, paused)', () => {
+    expect(statusText(watching())).toBe('Solo game in progress');
+    expect(statusText(watching({ phase: 'falling' }))).toBe('Solo game in progress');
+    expect(statusText(watching({ paused: true }))).toBe('Solo game in progress');
+    expect(statusText(watching({ keepMoving: true }))).toBe('Solo game in progress'); // the other phone's walker, not its own
+  });
+
+  it('between games it waits for the other phone, since its own Start would do nothing', () => {
+    for (const phase of ['lobby', 'won', 'gameover']) expect(statusText(watching({ phase }))).toBe('Waiting for the other phone to start');
+  });
+
+  it('the view marks it a spectator, which hides Start and Pause; the mode picker follows canChangeMode', () => {
+    expect(viewOf(watching())).toMatchObject({ spectator: true, mode: 'solo', player: 2 });
+    expect(viewOf(watching({ phase: 'lobby', canChangeMode: true }))).toMatchObject({ spectator: true, canChangeMode: true, idle: true });
+    expect(viewOf({ mode: 'solo', phase: 'playing', you: 1 }).spectator).toBe(false);
+    expect(viewOf({ mode: 'race', phase: 'playing', spectator: true }).spectator).toBe(false); // only a solo notion
+    expect(viewOf({ mode: 'solo', phase: 'playing', spectator: 'yes' }).spectator).toBe(false);
+  });
+
+  it('keepMovingFor is false for it, so it never buzzes for a walker it does not steer', () => {
+    expect(keepMovingFor(watching({ keepMoving: true }))).toBe(false);
+  });
+
+  it('the phone that steers sees the usual line', () => {
+    expect(statusText({ mode: 'solo', phase: 'playing', lives: 3, level: 1, you: 1 })).toBe(`${STATUS.playing} · ❤ 3 · Level 1`);
   });
 });
 

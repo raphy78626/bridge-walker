@@ -129,11 +129,11 @@ function onMessage(msg) {
     $('status').classList.toggle('keep-moving', keepMoving); // a red, pulsing line
     if (keepMovingBuzz.update(keepMoving)) navigator.vibrate?.(60); // once per onset
     showWind(msg);
-    $('btn-start').hidden = !view.idle;
+    $('btn-start').hidden = !view.idle || view.spectator; // the second phone in a solo game: its Start would do nothing
     $('btn-start').textContent = startLabel(msg);
     $('modes').hidden = !view.canChangeMode;
     for (const b of document.querySelectorAll('.mode')) b.setAttribute('aria-pressed', String(b.dataset.mode === view.mode));
-    $('btn-pause').hidden = msg.phase !== 'playing';
+    $('btn-pause').hidden = msg.phase !== 'playing' || view.spectator;
     $('btn-pause').textContent = msg.paused ? '▶ Resume' : '⏸ Pause';
     if (msg.phase === 'falling') navigator.vibrate?.(300);
   }
