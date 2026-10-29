@@ -16,6 +16,8 @@ import { createWindView } from './windView.js';
 const NO_GAPS = [];
 // ?tv previews the TV variant (cheaper materials and quality rules) on a desktop browser.
 const IS_TV = /SmartTV|Web0S|NetCast|Tizen/i.test(navigator.userAgent) || new URLSearchParams(location.search).has('tv');
+// ?profile: look changes wait for the GPU so their logged times are the real cost (it blocks: never in normal play).
+const PROFILE = new URLSearchParams(location.search).has('profile');
 
 // The composer main.js uses: the renderer and the camera, with the parts that each own one job (the environment,
 // the lights, the walker, the camera rig, the wind's look) wired together once per frame in render().
@@ -59,21 +61,33 @@ export function createScene(canvas, look = { theme: THEMES[0], seed: CLASSIC_SEE
   let lastT = null;
   let gameT = 0; // the scene's own clock: it advances by dt, which is 0 while paused, so nothing that moves with it keeps going
 
-  // Re-bakes the look for a level (looks.js): sky cube and PMREM, fog, lights, the canyon for the look's seed (handed over
-  // by the worker when it is ready, else built here), the rock's colours, clouds, waterfalls, trees, birds and stars. The
-  // bake is a one-off hitch (the sky is 6 cube faces plus PMREM), so main.js calls it on the win screen. The time is
-  // logged to the console and the server log.
+  // Re-bakes the look for a level (looks.js) in two halves, a frame apart, so a TV never does it all in one frame:
+  // now the canyon (handed over by the worker when it is ready, else built here) and its colours; on the next render() the
+  // atmosphere (fog, lights, the sky bake: 6 cube faces plus PMREM, clouds, birds, stars). main.js calls it on the win
+  // screen, behind the results panel. Each half's time goes to the console and the server log; ?profile also waits for
+  // the GPU (finish), which blocks, so only for measuring.
+  let pendingLook = null; // { theme, label, canyon, renders } between the two halves
   function setLook(next) {
-    if (!next?.theme || (next.theme.id === theme.id && next.seed === env.seed)) return;
+    if (!next?.theme) return;
+    if (pendingLook) finishLook(); // a second change before the next frame: complete the first
+    const seed = next.seed ?? env.seed;
+    if (next.theme.id === theme.id && seed === env.seed) return;
     const t0 = performance.now();
-    const from = `${theme.id}/${env.seed}`;
-    lighting.apply(next.theme);
-    env.setLook(next.theme, next.seed ?? env.seed);
-    renderer.getContext().finish(); // wait for the GPU, so the time below is the real cost, not just the queueing
-    const ms = performance.now() - t0;
-    console.log(`[theme] ${from} -> ${next.theme.id}/${env.seed}: ${ms.toFixed(0)} ms`);
-    window.reportToServer?.('theme', `${from} -> ${next.theme.id}/${env.seed} ${ms.toFixed(0)} ms`);
+    const label = `${theme.id}/${env.seed} -> ${next.theme.id}/${seed}`; // env.seed after: the old one when it was kept
+    const source = env.setCanyon(next.theme, seed, { waitForWorker: true }); // never a canyon built on the spot mid-game
+    if (PROFILE) renderer.getContext().finish();
+    pendingLook = { theme: next.theme, label, canyon: `canyon ${source} ${(performance.now() - t0).toFixed(0)} ms`, renders: 0 };
     theme = next.theme;
+  }
+  function finishLook() {
+    const t0 = performance.now();
+    lighting.apply(pendingLook.theme);
+    env.setAtmosphere(pendingLook.theme);
+    if (PROFILE) renderer.getContext().finish();
+    const line = `${pendingLook.label}: ${pendingLook.canyon}, sky ${(performance.now() - t0).toFixed(0)} ms`;
+    pendingLook = null;
+    console.log(`[theme] ${line}`);
+    window.reportToServer?.('theme', line);
   }
   // The theme alone, on the same canyon (the remote console's handle).
   function setTheme(next) {
@@ -123,6 +137,9 @@ export function createScene(canvas, look = { theme: THEMES[0], seed: CLASSIC_SEE
 
   return {
     render(match, t) {
+      // The second half of a look change, on the render after the one that uploads the new canyon (setLook is called earlier
+      // in a frame that is still to be drawn).
+      if (pendingLook && pendingLook.renders++ > 0) finishLook();
       arrange(match);
       const race = mode === 'race';
       const s = match.sessions[1];

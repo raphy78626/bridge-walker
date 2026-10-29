@@ -43,6 +43,15 @@ export function canyonTransfers(canyon) {
   return [...new Set(out)];
 }
 
+// Where a look change's canyon comes from: 'same' (no new seed), 'worker' (handed over, ready), 'page' (build it here) or
+// 'kept' (keep the canyon on screen). Mid-game (waitForWorker) a canyon is never built here: that is seconds on a TV's CPU,
+// so the canyon stays and only the theme changes. With no canyon yet (the first one) it must be built.
+export function canyonSource({ seedChanged, handedOver, hasCanyon, waitForWorker }) {
+  if (!seedChanged) return 'same';
+  if (handedOver) return 'worker';
+  return waitForWorker && hasCanyon ? 'kept' : 'page';
+}
+
 // The page's side: prepare(seed) asks the worker to build that canyon in the background; take(seed) returns it, or, if
 // the worker has not sent it yet (or there is no worker, or it failed), builds it on the spot. Only the latest prepared
 // canyon is kept. createWorker() returns a Worker running canyonWorker.js; without one everything is built on the spot.

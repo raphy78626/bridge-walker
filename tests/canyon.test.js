@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { BRIDGE_LENGTH } from '../src/game/session.js';
 import { CLASSIC_SEED, buildRockGeometry, cliffSpecs } from '../src/tv/canyon.js';
 import { MAX_TREES, buildTreeGeometry, treeSpots } from '../src/tv/trees.js';
-import { buildCanyon, canyonTransfers, createCanyonBuilder, geometryFrom } from '../src/tv/canyonBuild.js';
+import { buildCanyon, canyonTransfers, createCanyonBuilder, geometryFrom, canyonSource } from '../src/tv/canyonBuild.js';
 
 const SEEDS = [1, 7, 8, 123, 31337, 99999, 555555, 1e6, 2 ** 31 - 5, 1234567];
 const PLAIN_CANYON_TRIS = 169884; // the plain-cylinder canyon; rockStyle.test.js holds the classic one to +15%
@@ -205,5 +205,21 @@ describe('createCanyonBuilder', () => {
     worker.reply({ seed: 8, error: 'boom' });
     expect(canyons.take(8)).toEqual({ seed: 8, built: 'here' });
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('canyonSource: where a look change gets its canyon', () => {
+  it('the same seed needs no canyon', () => {
+    expect(canyonSource({ seedChanged: false, handedOver: false, hasCanyon: true, waitForWorker: true })).toBe('same');
+  });
+  it('a canyon the worker handed over is used', () => {
+    expect(canyonSource({ seedChanged: true, handedOver: true, hasCanyon: true, waitForWorker: true })).toBe('worker');
+  });
+  it('mid-game, a canyon the worker has not sent is never built here: the one on screen is kept', () => {
+    expect(canyonSource({ seedChanged: true, handedOver: false, hasCanyon: true, waitForWorker: true })).toBe('kept');
+  });
+  it('the first canyon, or a caller that does not wait for the worker, is built here', () => {
+    expect(canyonSource({ seedChanged: true, handedOver: false, hasCanyon: false, waitForWorker: true })).toBe('page');
+    expect(canyonSource({ seedChanged: true, handedOver: false, hasCanyon: true, waitForWorker: false })).toBe('page');
   });
 });

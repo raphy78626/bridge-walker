@@ -6,7 +6,7 @@ import { mulberry32 } from '../game/rng.js';
 import { applyWindSway, createWindUniforms } from './windSway.js';
 import { sstep } from './rockStyle.js';
 import { CLASSIC_SEED, TEX_M, fbm, noise, rockSurface } from './canyon.js';
-import { createCanyonBuilder, geometryFrom } from './canyonBuild.js';
+import { createCanyonBuilder, geometryFrom, canyonSource } from './canyonBuild.js';
 
 const PLANK_STEP = 0.45;
 const PLANK_DEPTH = 0.32; // along the bridge
@@ -14,7 +14,7 @@ const PLANK_DEPTH = 0.32; // along the bridge
 // Sky, rock, bridge, clouds, waterfalls, trees and birds. `update(t, camera)` (t in game seconds: the scene's clock, which stands still in a pause) drifts the clouds, scrolls the water,
 // flies the birds and keeps the stars centred on the camera.
 // `theme` (themes.js) gives the first look and `seed` the canyon's shapes (canyon.js); `setLook(theme, seed)` swaps them
-// later (sky, fog, rock and its lighting, clouds, water, extras). `canyons` (canyonBuild.js) hands over the canyon for a
+// later (sky, fog, rock and its lighting, clouds, water, extras), or setCanyon then setAtmosphere, a frame apart. `canyons` (canyonBuild.js) hands over the canyon for a
 // seed, built ahead in a worker when it can be: `prepareCanyon(seed)` asks for the next one.
 // lite: a cheaper variant for TV GPUs, from profiling on an LG TV (PowerVR BXE-4-32): unlit rock with
 // baked lighting, Lambert planks, no anisotropic filtering, and fewer cloud cards.
@@ -53,28 +53,46 @@ export function buildEnvironment(scene, renderer, { theme, seed = CLASSIC_SEED, 
     trees.setGeometry(geometryFrom(c.trees));
   }
 
-  // Everything a theme changes that lives here. Cheap except the sky bake (6 cube faces + PMREM) and the per-vertex
-  // rock colours (the grass, and in lite mode the lighting).
-  function applyTheme(next) {
+  // A look changes in two halves, which the scene runs on consecutive frames so that no single frame on a TV carries it all
+  // (scene.js): the canyon with its colours, then the atmosphere around it.
+  //
+  // The canyon for a theme: the rock (swapped when the seed changes: a new mesh to upload on the next frame) and the colours
+  // painted on it per vertex (the grass, and in lite mode the lighting), the trees and the water's tint.
+  // Returns where the canyon came from (canyonSource in canyonBuild.js: 'same', 'worker', 'page' or 'kept').
+  // waitForWorker: mid-game, keep the canyon on screen rather than build one here when the worker has not handed it over.
+  function setCanyon(next, nextSeed = canyonSeed, { waitForWorker = false } = {}) {
+    const from = canyonSource({
+      seedChanged: nextSeed !== canyonSeed,
+      handedOver: canyons.ready && canyons.pending === nextSeed,
+      hasCanyon: !!rockBase,
+      waitForWorker,
+    });
+    if (from === 'worker' || from === 'page') swapCanyon(nextSeed);
+    const { tint, desat, grass } = next.rock;
+    paintVertices(cliffs.geometry, rockBase, next, lite ? { lite, tint, desat, grass } : { grass });
+    if (!lite) rock.color.setRGB(...tint);
+    trees.setTheme(next);
+    falls.setTint(next.falls.tint);
+    return from;
+  }
+
+  // The atmosphere: fog, the sky bake (6 cube faces + PMREM, the GPU-heavy part), clouds, birds and stars.
+  function setAtmosphere(next) {
     scene.fog.color.set(next.fog.color);
     scene.fog.near = next.fog.near;
     scene.fog.far = next.fog.far;
     skyBaker.bake(next);
     scene.environmentIntensity = next.envIntensity;
-    const { tint, desat, grass } = next.rock;
-    paintVertices(cliffs.geometry, rockBase, next, lite ? { lite, tint, desat, grass } : { grass });
-    if (!lite) rock.color.setRGB(...tint);
-    trees.setTheme(next);
     clouds.setTheme(next, scene.fog);
     cloudFloor?.setTheme(next);
-    falls.setTint(next.falls.tint);
     birds.points.visible = next.birds;
     stars.points.visible = next.stars;
   }
 
+  // Both halves at once (the first look, tests and the remote console).
   function setLook(next, nextSeed = canyonSeed) {
-    if (nextSeed !== canyonSeed) swapCanyon(nextSeed);
-    applyTheme(next);
+    setCanyon(next, nextSeed);
+    setAtmosphere(next);
   }
   setLook(theme, seed);
 
@@ -100,6 +118,8 @@ export function buildEnvironment(scene, renderer, { theme, seed = CLASSIC_SEED, 
       gate.setSpan(gateHalfSpan(xs));
     },
     setLook,
+    setCanyon,
+    setAtmosphere,
     setTheme: (next) => setLook(next),
     // Starts building the canyon for a later setLook in the background (a no-op for the one already showing).
     prepareCanyon(next) {
