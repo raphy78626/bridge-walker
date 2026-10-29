@@ -143,6 +143,10 @@ export function sameResult(a, b) {
   return (
     a.kind === b.kind &&
     a.level === b.level &&
+    a.round === b.round && // a race or Wind Master round (undefined for the solo results)
+    a.winner === b.winner &&
+    a.walker === b.walker &&
+    a.outcome === b.outcome &&
     a.time === b.time &&
     a.falls === b.falls &&
     a.stars === b.stars &&

@@ -119,15 +119,16 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.5vh;
+  gap: 0.9vh;
   background: rgba(8, 12, 18, 0.88);
   font-size: 2.6vh;
 }
 #pairing[hidden] { display: none; }
-#pairing .code b { letter-spacing: 0.4em; font-size: 5vh; }
+#pairing .code b { letter-spacing: 0.4em; font-size: 4.2vh; }
+#pairing p { margin: 0; }
 #pairing .controls { font-size: 2.4vh; font-weight: 600; margin: 0.5vh 0 0; }
 #pairing .url { opacity: 0.6; font-size: 2vh; }
-#pairing .credits { opacity: 0.45; font-size: 1.4vh; max-width: 70vw; text-align: center; }
+#pairing .credits { opacity: 0.45; font-size: 1.3vh; max-width: 70vw; text-align: center; }
 #qr { background: #fff; border-radius: 12px; }
 
 /* ---------- wind warning ---------- */
@@ -270,4 +271,207 @@ html, body {
 @keyframes card-in {
   from { transform: translateY(2vh); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+
+/* ---------- two players ---------- */
+/* Each player has a colour on the phone's badge and here: P1 teal, P2 orange (src/shared/players.js). */
+:root { --p1: #19b5a5; --p2: #f5882f; }
+.c1 { color: var(--p1); }
+.c2 { color: var(--p2); }
+
+/* The pairing panel's lobby: the two slots, the mode and what to do next. */
+.slots { display: flex; gap: 3vh; margin: 0.4vh 0; }
+.slot {
+  padding: 0.7vh 2.4vh;
+  border-radius: 99vh;
+  border: 0.4vh solid rgba(255, 255, 255, 0.25);
+  font-size: 3vh;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  opacity: 0.65;
+}
+.slot.p1 { color: var(--p1); }
+.slot.p2 { color: var(--p2); }
+.slot.on { opacity: 1; background: rgba(255, 255, 255, 0.08); }
+.slot.on.p1 { border-color: var(--p1); }
+.slot.on.p2 { border-color: var(--p2); }
+.mode-line { display: flex; flex-direction: column; align-items: center; margin: 0.4vh 0 0; gap: 0.3vh; }
+.mode-line b { font-size: 4vh; letter-spacing: 0.04em; }
+.mode-line small { font-size: 2.2vh; opacity: 0.75; }
+.mode-warning { margin: 0; padding: 0.6vh 2vh; border-radius: 1.2vh; background: rgba(214, 62, 38, 0.85); font-size: 2.4vh; font-weight: 700; }
+.mode-warning[hidden], .slots[hidden], .mode-line[hidden], .pick-hint[hidden] { display: none; }
+.pick-hint { margin: 0.4vh 0 0; font-size: 3vh; font-weight: 800; animation: wind-pulse 0.9s ease-in-out infinite alternate; }
+
+/* Race HUD: a panel for each racer, the round line, and a track with both dots along the bottom. */
+#hud-race[hidden], #hud-wm[hidden] { display: none; }
+#hud[data-mode='race'] .pill, #hud[data-mode='race'] #balance { display: none; }
+#hud[data-panel='up'] #hud-race, #hud[data-panel='up'] #hud-wm { display: none; } /* not from behind the pairing panel */
+.rp {
+  position: absolute;
+  top: 4vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4vh;
+  min-width: 17vh;
+  padding: 1.2vh 2.2vh 1.4vh;
+  border-radius: 1.6vh;
+  background: rgba(10, 14, 20, 0.66);
+  font-weight: 700;
+}
+.rp-1 { left: 3vw; border-left: 0.9vh solid var(--p1); background: linear-gradient(90deg, rgba(25, 181, 165, 0.34), rgba(10, 14, 20, 0.66) 70%); }
+.rp-2 { right: 3vw; text-align: right; border-right: 0.9vh solid var(--p2); background: linear-gradient(270deg, rgba(245, 136, 47, 0.34), rgba(10, 14, 20, 0.66) 70%); }
+.rp-name { font-size: 4.6vh; line-height: 1; letter-spacing: 0.06em; }
+.rp-1 .rp-name { color: var(--p1); }
+.rp-2 .rp-name { color: var(--p2); }
+.rp-dist { font-size: 3.4vh; }
+.rp-row { display: flex; gap: 2vh; font-size: 2.6vh; opacity: 0.9; }
+.rp-2 .rp-row { justify-content: flex-end; }
+.round-line {
+  position: absolute;
+  top: 4vh;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: max-content;
+  padding: 1vh 2.6vh;
+  border-radius: 99vh;
+  background: rgba(10, 14, 20, 0.66);
+  font-size: 3vh;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+#race-track {
+  position: absolute;
+  bottom: 7vh;
+  left: 20vw;
+  width: 60vw;
+  height: 1.2vh;
+  border-radius: 1vh;
+  background: rgba(255, 255, 255, 0.28);
+}
+#race-track::before, #race-track::after { /* the start and the far end */
+  content: '';
+  position: absolute;
+  top: -0.8vh;
+  width: 0.5vh;
+  height: 2.8vh;
+  border-radius: 0.3vh;
+  background: #fff;
+}
+#race-track::before { left: 0; }
+#race-track::after { right: 0; }
+.dot {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 3.4vh;
+  height: 3.4vh;
+  margin: -1.7vh 0 0 -1.7vh;
+  border-radius: 50%;
+  border: 0.5vh solid #fff;
+  box-shadow: 0 0 1.4vh rgba(0, 0, 0, 0.6);
+}
+.dot-1 { background: var(--p1); margin-top: -2.4vh; }
+.dot-2 { background: var(--p2); margin-top: -1vh; }
+
+/* Wind Master HUD: the roles, the round, and the gust bar in the Wind Master's colour. */
+#hud-wm .round-line { top: 10.5vh; font-size: 2.4vh; padding: 0.6vh 2.2vh; }
+#wm-roles {
+  position: absolute;
+  top: 3.4vh;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: max-content;
+  padding: 0.9vh 3vh;
+  border-radius: 99vh;
+  background: rgba(10, 14, 20, 0.7);
+  font-size: 3.6vh;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+#wm-walker { color: var(--walker); }
+#wm-master { color: var(--master); }
+#wm-gust {
+  position: absolute;
+  top: 17vh;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: max-content;
+  display: flex;
+  align-items: center;
+  gap: 1.6vh;
+  padding: 0.8vh 2.2vh;
+  border-radius: 99vh;
+  background: rgba(10, 14, 20, 0.7);
+  font-size: 2.6vh;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--master);
+}
+.gust-bar { display: block; width: 22vh; height: 2vh; border-radius: 1vh; background: rgba(255, 255, 255, 0.2); overflow: hidden; }
+.gust-bar i { display: block; height: 100%; width: 0; border-radius: 1vh; background: var(--master); }
+#wm-gust.ready { box-shadow: 0 0 2.4vh var(--master); }
+#hud[data-mode='windmaster'] .pill { border-top: 0.7vh solid var(--walker); }
+#hud[data-mode='windmaster'] #level-banner, #hud[data-mode='race'] #level-banner { top: 22vh; }
+#hud[data-mode='race'] #wind { top: 31vh; }
+#hud[data-mode='windmaster'] #wind { top: 30vh; }
+#hud[data-mode='windmaster'] #gap-hint { top: 24vh; }
+
+/* Round and match results of the two-player modes. */
+.results.mp .res-level, .results.mp .res-run { display: none; }
+.res-mp { display: none; }
+.results.mp .res-mp { display: block; }
+.results.mp .res-title { font-size: 5.6vh; letter-spacing: 0.06em; opacity: 1; text-shadow: 0 0.3vh 1.4vh rgba(0, 0, 0, 0.5); }
+.results.mp .res-card { min-width: 86vh; }
+.mp-sub { margin-top: 0.8vh !important; font-size: 3vh; font-weight: 700; opacity: 0.9; }
+.mp-table {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  align-items: center;
+  gap: 1vh 4vh;
+  margin: 2.4vh auto 0;
+  width: 80%;
+}
+.mp-h { font-size: 3.6vh; font-weight: 900; letter-spacing: 0.1em; }
+.mp-label { font-size: 2.2vh; font-weight: 700; letter-spacing: 0.16em; opacity: 0.65; text-align: left; }
+.mp-cell { font-size: 5.4vh; font-weight: 800; line-height: 1.1; opacity: 0.7; }
+.mp-cell.win { opacity: 1; text-shadow: 0 0 2.4vh currentColor; }
+.mp-c1 { color: var(--p1); }
+.mp-c2 { color: var(--p2); }
+.mp-tally { margin-top: 2.4vh !important; font-size: 3.4vh; font-weight: 800; letter-spacing: 0.04em; }
+.mp-note { margin-top: 0.8vh !important; font-size: 3vh; font-weight: 700; color: #ffd24a; }
+.mp-note[hidden] { display: none; }
+
+/* Standing still on the bridge topples him: a warning below the top strip (solo and Wind Master), or under a racer's panel. */
+#keep-moving {
+  position: absolute;
+  top: 24vh;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: max-content;
+  padding: 1.2vh 3.4vh;
+  border-radius: 1.6vh;
+  background: rgba(214, 62, 38, 0.92);
+  box-shadow: 0 0 3vh rgba(255, 120, 60, 0.7);
+  font-size: 4.6vh;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0.3vh 1vh rgba(0, 0, 0, 0.5);
+  animation: gap-pulse 0.35s ease-in-out infinite alternate;
+}
+#keep-moving[hidden], .rp-keep[hidden] { display: none; }
+#hud[data-mode='windmaster'] #keep-moving { top: 36vh; }
+.rp-keep {
+  margin-top: 0.4vh;
+  padding: 0.4vh 1.4vh;
+  border-radius: 0.9vh;
+  background: rgba(214, 62, 38, 0.92);
+  font-size: 2.4vh;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-align: center;
+  animation: gap-pulse 0.35s ease-in-out infinite alternate;
 }

@@ -90,6 +90,30 @@
           <span class="wind-bar" aria-hidden="true"><i></i><i></i><i></i></span>
         </div>
       </div>
+      <!-- Race: a panel per racer (teal left, orange right), the round line, and a track with both dots along the bottom. -->
+      <div id="hud-race" hidden>
+        <div class="rp rp-1">
+          <b class="rp-name">P1</b>
+          <span class="rp-dist" id="r1-dist">0 / 60 m</span>
+          <span class="rp-row"><span id="r1-time">00:00</span><span id="r1-falls">0 falls</span></span>
+          <span class="rp-keep" id="r1-keep" hidden>KEEP MOVING!</span>
+        </div>
+        <div class="rp rp-2">
+          <b class="rp-name">P2</b>
+          <span class="rp-dist" id="r2-dist">0 / 60 m</span>
+          <span class="rp-row"><span id="r2-time">00:00</span><span id="r2-falls">0 falls</span></span>
+          <span class="rp-keep" id="r2-keep" hidden>KEEP MOVING!</span>
+        </div>
+        <div id="race-round" class="round-line"></div>
+        <div id="race-track"><i class="dot dot-1" id="track-1"></i><i class="dot dot-2" id="track-2"></i></div>
+      </div>
+      <!-- Wind Master: who walks and who blows, the round, and the gust bar in the Wind Master's colour. -->
+      <div id="hud-wm" hidden>
+        <div id="wm-roles"><span id="wm-walker"></span> · <span id="wm-master"></span></div>
+        <div id="wm-round" class="round-line"></div>
+        <div id="wm-gust"><span id="wm-gust-label">GUST READY</span><span class="gust-bar"><i id="wm-gust-fill"></i></span></div>
+      </div>
+      <div id="keep-moving" hidden>KEEP MOVING!</div>
       <div id="gap-hint" hidden></div>
       <div id="level-banner" hidden></div>
       <div id="cam-toast" hidden></div>
@@ -119,6 +143,16 @@
           <p id="run-best" class="res-best"></p>
           <p id="run-new" class="res-new" hidden>NEW BEST RUN!</p>
         </div>
+        <div class="res-mp">
+          <p id="mp-sub" class="mp-sub"></p>
+          <div class="mp-table">
+            <span class="mp-h"></span><b class="mp-h mp-c1">P1</b><b class="mp-h mp-c2">P2</b>
+            <span class="mp-label" id="mp-l0"></span><span class="mp-cell mp-c1" id="mp-a0"></span><span class="mp-cell mp-c2" id="mp-b0"></span>
+            <span class="mp-label" id="mp-l1"></span><span class="mp-cell mp-c1" id="mp-a1"></span><span class="mp-cell mp-c2" id="mp-b1"></span>
+          </div>
+          <p id="mp-tally" class="mp-tally"></p>
+          <p id="mp-note" class="mp-note"></p>
+        </div>
         <p id="res-next" class="res-next"></p>
       </div>
     </div>
@@ -129,7 +163,14 @@
       <p id="pairing-status" hidden>Connecting…</p>
       <p id="pairing-hint">Scan with your phone (same Wi-Fi)</p>
       <p class="code" id="pairing-code">Room <b id="room-code">····</b></p>
+      <div id="slots" class="slots" hidden>
+        <span class="slot" id="slot-1">P1 ○ waiting…</span>
+        <span class="slot" id="slot-2">P2 ○ waiting…</span>
+      </div>
+      <p id="mode-line" class="mode-line" hidden><b id="mode-label">Solo</b><small id="mode-blurb"></small></p>
+      <p id="mode-warning" class="mode-warning" hidden></p>
       <p class="controls" id="pairing-controls">Tilt to balance · Hold WALK or RUN · Tap JUMP at gaps</p>
+      <p id="pick-hint" class="pick-hint" hidden></p>
       <p class="credits">
         Sounds: Kenney, OpenGameArt, Wikimedia Commons. "Screaming Hawk" by PsychoBird (CC BY 3.0); waterfall
         recordings by Arie m den toom and Antti Leppänen (CC BY 4.0). Soldier by T. Choonyung (Mixamo). Full list: audio/CREDITS.md
