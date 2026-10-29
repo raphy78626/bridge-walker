@@ -21,6 +21,7 @@ export const LEDGE_CLOCK_START_S = 4;
 // swings him harder and harder (IDLE_PUSH per second, more than a full tilt can hold within a few seconds).
 export const IDLE_GRACE = 2;
 const IDLE_PUSH = 1.2;
+const LEASH_GAP_MARGIN = 0.1; // a leash that ends over a gap holds him this far before its near edge instead
 
 // Options (all optional; the defaults are the solo game):
 //   infiniteLives: falls still cost time and count in levelFalls, but lives never run out (race mode).
@@ -41,6 +42,10 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
     phaseTime: 0, // seconds since the current phase began
     walker: createWalker(),
     idleTime: 0, // seconds standing still on the bridge; the TV and phone say "keep moving" as it builds
+    // The race's leash: the furthest he may walk (metres), or null for no limit. The race sets it every tick from the other
+    // walker; nothing else does. At the limit he stands and balances, and waiting there is not standing still (no idle push).
+    leash: null,
+    waiting: false, // held at the leash this tick
     fallCause: null, // 'balance' | 'gap' | null: why we are in (or just left) the falling phase
     gaps: [], // [{ start, end }] metres along the bridge; a new array each time a level begins
     levelFalls: 0, // falls this level (a gap fall and a balance fall both count)
@@ -90,6 +95,7 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
       instability = d.instability;
       s.walker = { ...createWalker(), z: START_Z };
       s.idleTime = 0;
+      s.waiting = false;
       s.gaps = generateGaps(seed, s.level, BRIDGE_LENGTH);
       s.fallCause = null;
       const windParams = { seed: seed + s.level, maxForce: d.maxWind, gustGapMin: d.gustGapMin, gustGapMax: d.gustGapMax };
@@ -109,11 +115,20 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
         if (onBridge || s.time > 0 || (ledgeClockAfter != null && s.ledgeTime >= ledgeClockAfter)) s.time += dt;
         const { tilt, walking, running } = s.input;
         const onFeet = (walking || running) && !s.walker.airborne;
-        s.idleTime = onBridge && !onFeet && !s.walker.airborne ? s.idleTime + dt : 0;
+        s.idleTime = onBridge && !onFeet && !s.walker.airborne && !s.waiting ? s.idleTime + dt : 0;
         const idlePush = s.idleTime > IDLE_GRACE ? IDLE_PUSH * (s.idleTime - IDLE_GRACE) * (Math.sign(s.walker.lean) || 1) : 0;
         const sway = onFeet ? 0.15 * Math.sin(s.time * 11) : 0; // footsteps rock the walker
         const push = onBridge ? wind.force(s.time) + sway + idlePush : 0;
+        const prevZ = s.walker.z;
         s.walker = stepWalker(s.walker, { tilt, walking, running, jump, wind: push, instability, ground: !onBridge }, dt);
+        // Held at the leash: no further than the limit (a jump in the air carries on, and lands where it lands), and never
+        // pulled back from where he already stands. stepWalker returns a fresh walker, so it is safe to change in place.
+        const limit = leashLimit();
+        if (!s.walker.airborne && !s.walker.fallen && s.walker.z > limit) {
+          s.walker.z = Math.max(prevZ, limit);
+          s.walker.speed = 0;
+        }
+        s.waiting = !s.walker.airborne && s.walker.z >= limit - 0.01;
         if (s.walker.fallen) {
           loseLife('balance');
         } else if (!s.walker.airborne && gapAt(s.gaps, s.walker.z)) {
@@ -136,6 +151,7 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
         if (s.lives > 0 || infiniteLives) {
           s.walker = { ...createWalker(), z: respawnZ() };
           s.idleTime = 0;
+          s.waiting = false;
           s.fallCause = null;
           enter('playing');
         } else {
@@ -151,6 +167,13 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
   function respawnZ() {
     const gap = gapAt(s.gaps, s.walker.z);
     return gap ? gap.start - GAP_RESPAWN_BACK : s.walker.z;
+  }
+
+  // Where the leash holds him: Infinity without one. A limit over a gap would stand him in it, so it moves to the near edge.
+  function leashLimit() {
+    if (s.leash == null) return Infinity;
+    const gap = gapAt(s.gaps, s.leash);
+    return gap ? gap.start - LEASH_GAP_MARGIN : s.leash;
   }
 
   function loseLife(cause) {

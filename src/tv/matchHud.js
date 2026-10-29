@@ -22,6 +22,8 @@ const fallsText = (n) => `${n} ${n === 1 ? 'fall' : 'falls'}`;
 export const mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
 export const distText = (z) => `${Math.min(BRIDGE_LENGTH, Math.max(0, Math.floor(z)))} / ${BRIDGE_LENGTH} m`;
 export const pname = (p) => PLAYER_NAMES[p];
+// A racer held at the leash (game/match.js RACE_LEASH): his panel and his phone say who he is waiting for.
+export const waitingOf = (s) => !!s && s.phase === 'playing' && !s.paused && !s.halted && s.waiting === true;
 
 // "Round 2 · P1 1 – 0 P2" (race: the round wins).
 export function raceRoundLine(round, tally) {
@@ -42,6 +44,7 @@ export function raceHudView(match) {
       time: mmss(match.elapsed), // the shared round clock: a lane still on the ledge reads the same as the other
       falls: fallsText(s.levelFalls),
       keepMoving: keepMovingOf(s),
+      waiting: waitingOf(s),
     };
   }
   return { round: match.round, roundLine: raceRoundLine(match.round, match.tally), players };

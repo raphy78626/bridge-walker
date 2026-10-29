@@ -3,7 +3,8 @@
 //
 //   solo        one session, one phone (player 1). Exactly the session's own phases and rules.
 //   race        two sessions, same seed (identical gaps and wind). Falls cost no lives, only time. The first to the far
-//               end wins the round; the other is frozen where it stands. Every round is the next level.
+//               end wins the round; the other is frozen where it stands. Every round is the next level. The leader
+//               waits for the other at RACE_LEASH metres ahead, except in the final sprint.
 //   windmaster  one session and one controlled wind. One player walks, the other sends gusts (at least
 //               WIND_MASTER_MIN_FORCE strong). Roles swap after every round (a cleared level or a game over). The
 //               seeded wind is off.
@@ -11,12 +12,18 @@
 // match.phase is 'lobby' | 'playing' | 'roundOver' | 'matchOver' in race and windmaster ('playing' includes falling
 // and respawning). In solo it is the session's own phase (lobby, playing, falling, won, gameover) so the existing
 // single-player flow carries over unchanged.
-import { createSession, START_LIVES, LEDGE_CLOCK_START_S } from './session.js';
+import { createSession, START_LIVES, LEDGE_CLOCK_START_S, BRIDGE_LENGTH } from './session.js';
 import { createControlledWind } from './wind.js';
 import { WIND_MASTER_FALL_POINTS } from './scoring.js';
 import { MODES } from '../shared/protocol.js';
 
 export const RACE_ROUNDS_TO_WIN = 3; // first to this many round wins takes the match
+// The two racers share one camera, which stays behind the one further back: a leader far ahead is too small to see his own
+// gaps. So the leader may be at most RACE_LEASH metres ahead, and waits there for the other. The last RACE_SPRINT metres
+// are free: once the leash would reach into them it lets go, and the finish is a real sprint.
+export const RACE_LEASH = 6;
+export const RACE_SPRINT = 10;
+export const raceLeash = (otherZ) => (otherZ + RACE_LEASH >= BRIDGE_LENGTH - RACE_SPRINT ? null : otherZ + RACE_LEASH);
 export const WINDMASTER_ROUNDS = 4; // rounds in a windmaster match: each player walks twice
 // The seeded wind's peak force is tuned for a walker who must beat it (0.25 on level 1), which is far too gentle for a
 // gust a player sends on purpose: it almost never topples anyone. A Wind Master's gust is at least this strong.
@@ -52,9 +59,10 @@ function clearSessionInput(session) {
   Object.assign(session.input, { tilt: 0, walking: false, running: false, jump: false });
 }
 
-export function createMatch({ mode = 'solo', seed = 1, winsToWin = RACE_ROUNDS_TO_WIN, rounds = WINDMASTER_ROUNDS } = {}) {
+// leash (race only): false lets a racer run on alone, for tests of the other rules. The game always has it on.
+export function createMatch({ mode = 'solo', seed = 1, winsToWin = RACE_ROUNDS_TO_WIN, rounds = WINDMASTER_ROUNDS, leash = true } = {}) {
   if (!MODES.includes(mode)) mode = 'solo';
-  if (mode === 'race') return createRace(seed, winsToWin);
+  if (mode === 'race') return createRace(seed, winsToWin, leash);
   if (mode === 'windmaster') return createWindMaster(seed, rounds);
   return createSolo(seed);
 }
@@ -87,7 +95,7 @@ function createSolo(seed) {
   };
 }
 
-function createRace(seed, winsToWin) {
+function createRace(seed, winsToWin, leash) {
   const sessions = {
     1: createSession({ seed, infiniteLives: true, ledgeClockAfter: LEDGE_CLOCK_START_S }),
     2: createSession({ seed, infiniteLives: true, ledgeClockAfter: LEDGE_CLOCK_START_S }),
@@ -157,6 +165,10 @@ function createRace(seed, winsToWin) {
     update(dt) {
       if (m.phase !== 'playing') return;
       if (!sessions[1].paused) m.elapsed += dt;
+      if (leash) {
+        sessions[1].leash = raceLeash(sessions[2].walker.z);
+        sessions[2].leash = raceLeash(sessions[1].walker.z);
+      }
       for (const s of both) s.update(dt);
       finish();
     },

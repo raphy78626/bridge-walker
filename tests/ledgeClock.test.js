@@ -55,7 +55,7 @@ describe('the ledge clock', () => {
   });
 
   it('the ledge wait restarts with each round, and a paused wait does not count', () => {
-    const m = createMatch({ mode: 'race', seed: 3 });
+    const m = createMatch({ mode: 'race', leash: false, seed: 3 });
     m.start();
     m.togglePause();
     tick(m, 10);

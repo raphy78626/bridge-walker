@@ -462,8 +462,20 @@ html, body {
   text-shadow: 0 0.3vh 1vh rgba(0, 0, 0, 0.5);
   animation: gap-pulse 0.35s ease-in-out infinite alternate;
 }
-#keep-moving[hidden], .rp-keep[hidden] { display: none; }
+#keep-moving[hidden], .rp-keep[hidden], .rp-wait[hidden] { display: none; }
 #hud[data-mode='windmaster'] #keep-moving { top: 36vh; }
+/* The race leader held at the leash: a calm amber tag, not the red alarm (waiting there is safe). */
+.rp-wait {
+  margin-top: 0.4vh;
+  padding: 0.4vh 1.4vh;
+  border-radius: 0.9vh;
+  background: rgba(240, 180, 40, 0.92);
+  color: #1d1606;
+  font-size: 2.4vh;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
 .rp-keep {
   margin-top: 0.4vh;
   padding: 0.4vh 1.4vh;

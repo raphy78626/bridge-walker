@@ -29,7 +29,7 @@ describe('matchStateFor', () => {
   });
 
   it('race: both players are racers, with their own phase and falls', () => {
-    const m = createMatch({ mode: 'race', seed: 3 });
+    const m = createMatch({ mode: 'race', leash: false, seed: 3 });
     expect(matchStateFor(m, 2)).toMatchObject({ mode: 'race', you: 2, role: 'racer', phase: 'lobby', round: 1, tally: { 1: 0, 2: 0 } });
     m.start();
     onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
@@ -70,7 +70,7 @@ describe('matchStateFor', () => {
     const raw = encode(big);
     expect(raw.length).toBeLessThan(1024);
     expect(decode(raw)).toEqual(big);
-    const race = createMatch({ mode: 'race', winsToWin: 99 });
+    const race = createMatch({ mode: 'race', leash: false, winsToWin: 99 });
     race.start();
     onBridge(race); // levels start on the safe ledge; these tests begin on the first plank
     race.sessions[1].walker = { ...race.sessions[1].walker, z: 59.99 };

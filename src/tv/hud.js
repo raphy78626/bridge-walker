@@ -3,7 +3,7 @@ import { FALL_ANGLE } from '../game/balance.js';
 import { WIND_OFF, windIndicator } from './windFx.js';
 import { formatPar, formatScore, underPar } from './results.js';
 import { keepMovingOf } from './keepMoving.js';
-import { GUST_RING_S, raceHudView, windmasterHudView } from './matchHud.js';
+import { GUST_RING_S, raceHudView, windmasterHudView, waitingOf } from './matchHud.js';
 
 export function formatTime(sec) {
   const m = Math.floor(sec / 60);
@@ -206,8 +206,10 @@ export function createHud(doc = document, timers = globalThis) {
       const tally = match.tally;
       const m1 = keepMovingOf(a);
       const m2 = keepMovingOf(b);
-      if (m1 === k.m1 && m2 === k.m2 && d1 === k.d1 && d2 === k.d2 && t1 === k.t1 && t2 === k.t2 && dot1 === k.dot1 && dot2 === k.dot2 && a.levelFalls === k.f1 && b.levelFalls === k.f2 && match.round === k.round && tally[1] === k.w1 && tally[2] === k.w2) return;
-      Object.assign(k, { m1, m2, d1, d2, t1, t2, dot1, dot2, f1: a.levelFalls, f2: b.levelFalls, round: match.round, w1: tally[1], w2: tally[2] });
+      const w1 = waitingOf(a);
+      const w2 = waitingOf(b);
+      if (m1 === k.m1 && m2 === k.m2 && w1 === k.wait1 && w2 === k.wait2 && d1 === k.d1 && d2 === k.d2 && t1 === k.t1 && t2 === k.t2 && dot1 === k.dot1 && dot2 === k.dot2 && a.levelFalls === k.f1 && b.levelFalls === k.f2 && match.round === k.round && tally[1] === k.w1 && tally[2] === k.w2) return;
+      Object.assign(k, { m1, m2, wait1: w1, wait2: w2, d1, d2, t1, t2, dot1, dot2, f1: a.levelFalls, f2: b.levelFalls, round: match.round, w1: tally[1], w2: tally[2] });
       const v = raceHudView(match);
       for (const p of [1, 2]) {
         setText(`r${p}-dist`, v.players[p].dist);
@@ -215,6 +217,7 @@ export function createHud(doc = document, timers = globalThis) {
         setText(`r${p}-falls`, v.players[p].falls);
         $(`track-${p}`).style.left = `${v.players[p].progress * 100}%`;
         $(`r${p}-keep`).hidden = !v.players[p].keepMoving;
+        $(`r${p}-wait`).hidden = !v.players[p].waiting;
       }
       setText('race-round', v.roundLine);
     },

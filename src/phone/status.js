@@ -17,6 +17,8 @@ const isPlayer = (n) => n === 1 || n === 2;
 export const KEEP_MOVING_TEXT = 'KEEP MOVING!';
 export const SPECTATOR_TEXT = 'Solo game in progress';
 export const SPECTATOR_WAITING_TEXT = 'Waiting for the other phone to start';
+// The race leader held at the leash (the TV's msg.waiting): he is safe there, and keeps balancing.
+export const waitForText = (you) => `Wait for P${you === 1 ? 2 : 1} — keep your balance`;
 
 // Should this phone warn "keep moving"? The TV sets msg.keepMoving while this phone's walker has stood still on the bridge
 // too long. Not for a Wind Master, who has no soldier (the walker's flag reaches both phones in that mode), and not while
@@ -129,6 +131,7 @@ function multiplayerText(msg, view) {
   const falls = view.mode === 'race' && Number.isFinite(msg.falls) ? ` · Falls ${msg.falls}` : Number.isFinite(msg.lives) ? ` · ❤ ${msg.lives}` : '';
   const base = keepMovingFor(msg, view.player)
     ? KEEP_MOVING_TEXT
+    : view.mode === 'race' && msg.waiting === true && msg.phase === 'playing' ? waitForText(view.player)
     : msg.phase === 'falling' ? 'You fell!' : view.mode === 'race' ? 'Race! Get to the end first' : 'Balance! Jump the gaps';
   return `${base}${falls}${level}`;
 }

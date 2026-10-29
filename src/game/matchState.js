@@ -49,6 +49,7 @@ export function matchStateFor(match, player) {
   if (match.mode === 'race') {
     msg.tally = match.tally;
     msg.falls = session.levelFalls;
+    msg.waiting = session.phase === 'playing' && !session.halted && session.waiting === true; // held at the race leash
   } else {
     msg.lives = session.lives;
   }
