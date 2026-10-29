@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createSession, WIND_WARNING_S, START_LIVES } from '../src/game/session.js';
 import { createWind } from '../src/game/wind.js';
 import { difficulty } from '../src/game/difficulty.js';
+import { onBridge } from './helpers/onBridge.js';
 
 const DT = 1 / 60;
 const steady = (w) => Math.max(-1, Math.min(1, -2 * w.lean - 0.5 * w.leanVel));
@@ -28,6 +29,7 @@ describe('session.forecast', () => {
   it('is calm (with the first gust still ahead) right after start()', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.forecast.state).toBe('calm');
     expect(s.forecast.dir).toBe(0);
     expect(s.forecast.eta).toBeGreaterThan(WIND_WARNING_S);
@@ -39,6 +41,7 @@ describe('session.forecast', () => {
       const s = createSession({ seed: 5 });
       s.level = level;
       s.start();
+      onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
       const wind = windFor(5, level);
       const gust = wind.peek(0);
       const end = gust.start + gust.length;
@@ -71,6 +74,7 @@ describe('session.forecast', () => {
     const s = createSession({ seed: 7 });
     s.level = 5;
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     const wind = windFor(7, 5);
     let gustFrames = 0;
     for (let i = 0; i < 60 * 40; i++) {
@@ -97,6 +101,7 @@ describe('session.forecast', () => {
   it('is calm while falling, then forecasts again after the respawn', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.walker = { ...s.walker, lean: 1.2 };
     s.update(DT);
     expect(s.phase).toBe('falling');
@@ -110,12 +115,14 @@ describe('session.forecast', () => {
   it('is calm on the win screen and on game over, and reset by the next start()', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.walker = { ...s.walker, z: 59.99 };
     s.input.walking = true;
     for (let i = 0; i < 10 && s.phase === 'playing'; i++) s.update(DT);
     expect(s.phase).toBe('won');
     expect(s.forecast).toEqual(CALM);
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.forecast.state).toBe('calm');
     expect(s.forecast.eta).toBeGreaterThan(0);
 
@@ -127,6 +134,7 @@ describe('session.forecast', () => {
     expect(s.forecast).toEqual(CALM);
     expect(s.lives).toBe(0);
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.phase).toBe('playing');
     expect(s.lives).toBe(START_LIVES);
     expect(s.forecast.state).toBe('calm');

@@ -7,6 +7,7 @@ import {
   FALL_DURATION,
 } from '../src/game/session.js';
 import { JUMP_FORWARD, JUMP_VY, GRAVITY_ACCEL, RUN_SPEED } from '../src/game/balance.js';
+import { onBridge } from './helpers/onBridge.js';
 
 const DT = 1 / 60;
 const steady = (w) => Math.max(-1, Math.min(1, -2 * w.lean - 0.5 * w.leanVel));
@@ -45,6 +46,7 @@ describe('session', () => {
   it('loses a life on a fall, then respawns at the same spot', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.input.walking = true;
     advance(s, 3, steady);
     s.input.walking = false;
@@ -63,6 +65,7 @@ describe('session', () => {
     const s = createSession({ seed: 5 });
     expect(s.fallCause).toBe(null);
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     until(s, 'falling', 60);
     expect(s.fallCause).toBe('balance');
   });
@@ -70,6 +73,7 @@ describe('session', () => {
   it('ends the game after the last life', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(until(s, 'gameover', 300)).toBe('gameover');
     expect(s.lives).toBe(0);
   });
@@ -77,6 +81,7 @@ describe('session', () => {
   it('reaches the far side with steady balance', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.input.walking = true;
     expect(until(s, 'won', 120, player())).toBe('won');
     expect(s.walker.z).toBeGreaterThanOrEqual(BRIDGE_LENGTH);
@@ -86,12 +91,14 @@ describe('session', () => {
   it('START after a win goes to the next level and keeps lives', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     until(s, 'falling', 60); // idle until a gust knocks the walker off
     until(s, 'playing', 5);
     expect(s.lives).toBe(START_LIVES - 1);
     s.input.walking = true;
     expect(until(s, 'won', 120, player())).toBe('won');
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.phase).toBe('playing');
     expect(s.level).toBe(2);
     expect(s.walker.z).toBe(0);
@@ -101,13 +108,16 @@ describe('session', () => {
   it('START after game over resets level and lives', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.input.walking = true;
     until(s, 'won', 120, player());
     s.start(); // level 2
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.input.walking = false;
     s.input.tilt = 0;
     expect(until(s, 'gameover', 300)).toBe('gameover');
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.phase).toBe('playing');
     expect(s.level).toBe(1);
     expect(s.lives).toBe(START_LIVES);
@@ -116,18 +126,21 @@ describe('session', () => {
   it('ignores START while playing', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.input.walking = true;
     advance(s, 1, steady);
     const z = s.walker.z;
-    s.start();
+    s.start(); // ignored mid-level
     expect(s.walker.z).toBe(z);
   });
 
   it('ignores START while falling', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     until(s, 'falling', 60);
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.phase).toBe('falling');
     expect(s.walker.fallen).toBe(true);
   });
@@ -135,6 +148,7 @@ describe('session', () => {
   it('plays the fall for FALL_DURATION before respawning', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     until(s, 'falling', 60);
     advance(s, FALL_DURATION - 0.1);
     expect(s.phase).toBe('falling');
@@ -146,6 +160,7 @@ describe('session', () => {
     const s = createSession({ seed: 5 });
     s.level = 20;
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.input.walking = true;
     expect(until(s, 'won', 120, player())).toBe('won'); // 1.2 m gaps at level 20
   });
@@ -155,6 +170,7 @@ const gapsFor = (seed, level) => {
   const s = createSession({ seed });
   s.level = level;
   s.start();
+  onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
   return s.gaps;
 };
 
@@ -168,6 +184,7 @@ describe('gaps', () => {
   it('winning in mid-air lands him: no hover on the win screen, no stray thud next level', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.walker = { ...s.walker, z: BRIDGE_LENGTH - 0.05, y: 0.3, vy: 1, airborne: true, speed: 3 };
     expect(until(s, 'won', 2)).toBe('won');
     expect(s.walker).toMatchObject({ y: 0, vy: 0, airborne: false, speed: 0 });
@@ -206,22 +223,27 @@ describe('gaps', () => {
   it('creates a new array on every start() that begins a level', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     const first = s.gaps;
     s.input.walking = true;
     until(s, 'won', 120, player());
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.gaps).not.toBe(first);
     expect(s.level).toBe(2);
     expect(s.gaps).toHaveLength(4);
     s.start(); // ignored while playing: no new level, same array
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     const second = s.gaps;
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.gaps).toBe(second);
   });
 
   it('keeps the same array through a respawn', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     const gaps = s.gaps;
     until(s, 'falling', 60);
     until(s, 'playing', 5);
@@ -253,6 +275,7 @@ describe('crossing gaps', () => {
     const s = createSession({ seed: 5 });
     s.level = level;
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     const gap = s.gaps[0];
     s.walker = { ...s.walker, z: gap.start - before };
     return { s, gap };
@@ -378,6 +401,7 @@ describe('input flags', () => {
     expect(s.input.jump).toBe(false);
 
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.input.jump = true;
     s.update(DT);
     expect(s.input.jump).toBe(false);
@@ -393,6 +417,7 @@ describe('input flags', () => {
   it('consumes a jump pressed while falling and does not jump on respawn', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     until(s, 'falling', 60);
     s.input.jump = true;
     s.update(DT);
@@ -404,6 +429,7 @@ describe('input flags', () => {
   it('running overrides walking for speed', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.input.walking = true;
     s.input.running = true;
     s.update(DT);
@@ -413,6 +439,7 @@ describe('input flags', () => {
   it('starts every level with a ground walker and no fall cause', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.fallCause).toBe(null);
     expect(s.walker).toMatchObject({ y: 0, vy: 0, airborne: false, speed: 0 });
     expect(s.input).toEqual({ tilt: 0, walking: false, running: false, jump: false });

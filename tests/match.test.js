@@ -5,6 +5,8 @@ import { createControlledWind, GUST_COOLDOWN_S, CONTROLLED_GUST_S } from '../src
 import { forecastAt } from '../src/game/forecast.js';
 import { difficulty, MAX_WIND } from '../src/game/difficulty.js';
 import { WIND_MASTER_FALL_POINTS } from '../src/game/scoring.js';
+import { onBridge } from './helpers/onBridge.js';
+import { START_Z } from '../src/game/session.js';
 
 const DT = 1 / 60;
 const steady = (w) => Math.max(-1, Math.min(1, -2 * w.lean - 0.5 * w.leanVel));
@@ -87,6 +89,7 @@ describe('createControlledWind', () => {
     const s = createSession({ seed: 3, windSource: ({ maxForce }) => (wind = createControlledWind({ maxForce })) });
     s.level = 4;
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.forecast.state).toBe('calm');
     for (let i = 0; i < 60; i++) { s.input.tilt = steady(s.walker); s.update(DT); }
     expect(wind.trigger(1, s.time)).toBe(true);
@@ -101,6 +104,7 @@ describe('session options', () => {
   it('infiniteLives: a fall costs no life and never ends the run', () => {
     const s = createSession({ seed: 5, infiniteLives: true });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     for (let i = 0; i < 5; i++) {
       s.walker = { ...s.walker, lean: 1.2 };
       s.update(DT);
@@ -115,15 +119,18 @@ describe('session options', () => {
   it('start({ level, lives }) overrides the level and lives; plain start() is unchanged', () => {
     const s = createSession({ seed: 5 });
     s.start({ level: 3, lives: 2 });
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s).toMatchObject({ level: 3, lives: 2, phase: 'playing' });
     const t = createSession({ seed: 5 });
     t.start();
+    onBridge(t); // levels start on the safe ledge; these tests begin on the first plank
     expect(t).toMatchObject({ level: 1, lives: START_LIVES });
   });
 
   it('halt() freezes a level in progress until start()', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.input.walking = true;
     for (let i = 0; i < 60; i++) { s.input.tilt = steady(s.walker); s.update(DT); }
     s.halt();
@@ -133,6 +140,7 @@ describe('session options', () => {
     expect(s.walker.z).toBe(z);
     expect(s.time).toBe(time);
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s).toMatchObject({ halted: false, time: 0 });
   });
 });
@@ -145,6 +153,7 @@ describe('solo match', () => {
     expect(m.walkerOf()).toBeNull();
     expect(m.windMasterOf()).toBeNull();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m.phase).toBe('playing');
     expect(m.input(2, { t: 'walk', on: true })).toBe(false);
     expect(m.sessions[1].input.walking).toBe(false);
@@ -155,12 +164,14 @@ describe('solo match', () => {
     expect(m.result).toBe(m.sessions[1].result);
     expect(m.scores[1]).toBe(m.sessions[1].runScore);
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m).toMatchObject({ phase: 'playing', level: 2, round: 2 });
   });
 
   it('falls cost lives, exactly as before', () => {
     const m = createMatch({ mode: 'solo', seed: 5 });
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     m.sessions[1].walker = { ...m.sessions[1].walker, lean: 1.2 };
     m.update(DT);
     expect(m.phase).toBe('falling');
@@ -182,6 +193,7 @@ describe('race match', () => {
     expect(m.walkerOf()).toBeNull();
     expect(m.windMasterOf()).toBeNull();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m.phase).toBe('playing');
     expect([m.sessions[1].phase, m.sessions[2].phase]).toEqual(['playing', 'playing']);
   });
@@ -190,6 +202,7 @@ describe('race match', () => {
     const m = race({ winsToWin: 99 });
     for (let level = 1; level <= 7; level++) {
       m.start();
+      onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
       expect(m.level).toBe(level);
       expect(m.sessions[1].gaps).toEqual(m.sessions[2].gaps);
       expect(m.sessions[1].gaps.length).toBeGreaterThan(0);
@@ -200,6 +213,7 @@ describe('race match', () => {
       expect(m.phase).toBe('roundOver');
     }
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     m.input(1, { t: 'walk', on: false });
     const a = m.sessions[1];
     const b = m.sessions[2];
@@ -217,6 +231,7 @@ describe('race match', () => {
   it('routes each phone to its own walker', () => {
     const m = race();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     m.input(2, { t: 'walk', on: true });
     m.input(1, { t: 'tilt', v: 0.4 });
     m.input(2, { t: 'run', on: true });
@@ -232,6 +247,8 @@ describe('race match', () => {
   it('ends the round when one player reaches the end, and freezes the other', () => {
     const m = race();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
+    m.sessions[2].walker = { ...m.sessions[2].walker, z: START_Z }; // player 2 waits on the safe ledge
     runUntil(m, () => m.phase !== 'playing', 120, () => { drive(m, 1); drive(m, 2, { walk: false }); });
     expect(m.phase).toBe('roundOver');
     expect(m.result).toMatchObject({
@@ -243,7 +260,7 @@ describe('race match', () => {
       matchWinner: 0,
     });
     expect(m.result.times[1]).toBeGreaterThan(30);
-    expect(m.result.times[2]).toBeCloseTo(m.result.times[1], 1); // the loser's clock stopped with the round
+    expect(m.result.times[2]).toBe(0); // never stepped onto the bridge, so the clock never started
     expect(m.tally).toEqual({ 1: 1, 2: 0 });
     expect(m.scores[1]).toBe(m.sessions[1].result.score);
     expect(m.scores[2]).toBe(0);
@@ -256,6 +273,7 @@ describe('race match', () => {
   it('declares player 2 the winner when player 2 gets there first', () => {
     const m = race();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     runUntil(m, () => m.phase !== 'playing', 120, () => { drive(m, 2); drive(m, 1, { walk: false }); });
     expect(m.result).toMatchObject({ winner: 2, tally: { 1: 0, 2: 1 } });
   });
@@ -263,6 +281,7 @@ describe('race match', () => {
   it('a tie in the same tick goes to the further walker, then to player 1', () => {
     const m = race();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     for (const p of [1, 2]) m.sessions[p].walker = { ...m.sessions[p].walker, z: 59.99 };
     m.sessions[1].gaps = [];
     m.sessions[2].gaps = [];
@@ -276,6 +295,8 @@ describe('race match', () => {
   it('falls cost no lives, and the round goes on', () => {
     const m = race();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
+    m.sessions[1].walker = { ...m.sessions[1].walker, z: START_Z }; // player 1 waits on the safe ledge
     const s = m.sessions[2];
     for (let i = 0; i < 4; i++) {
       s.walker = { ...s.walker, lean: 1.2 };
@@ -293,9 +314,11 @@ describe('race match', () => {
   it('the next round is the next level, with both lanes fresh and the tally kept', () => {
     const m = race();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     runUntil(m, () => m.phase !== 'playing', 120, () => { drive(m, 1); drive(m, 2, { walk: false }); });
     const level1 = m.sessions[1].gaps;
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m).toMatchObject({ phase: 'playing', round: 2, level: 2, result: null, tally: { 1: 1, 2: 0 } });
     for (const p of [1, 2]) expect(m.sessions[p]).toMatchObject({ phase: 'playing', level: 2, time: 0, levelFalls: 0, halted: false });
     expect(m.sessions[1].gaps).toEqual(m.sessions[2].gaps);
@@ -307,17 +330,20 @@ describe('race match', () => {
     const m = race({ winsToWin: 2 });
     for (let r = 1; r <= 2; r++) {
       m.start();
+      onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
       runUntil(m, () => m.phase !== 'playing', 120, () => { drive(m, 1); drive(m, 2, { walk: false }); });
     }
     expect(m.phase).toBe('matchOver');
     expect(m.result).toMatchObject({ round: 2, winner: 1, matchWinner: 1, tally: { 1: 2, 2: 0 } });
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m).toMatchObject({ phase: 'playing', round: 1, level: 1, tally: { 1: 0, 2: 0 }, scores: { 1: 0, 2: 0 } });
   });
 
   it('pauses and resumes both lanes together', () => {
     const m = race();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     m.togglePause();
     expect(m.paused).toBe(true);
     const z = m.sessions[1].time;
@@ -334,6 +360,7 @@ describe('race match', () => {
     const m = race();
     expect(m.canChangeMode).toBe(true);
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m.canChangeMode).toBe(false);
   });
 });
@@ -349,6 +376,7 @@ describe('windmaster match', () => {
     expect(m.walkerOf()).toBe(1);
     expect(m.windMasterOf()).toBe(2);
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m.phase).toBe('playing');
     expect(m.sessions[1]).toMatchObject({ phase: 'playing', lives: START_LIVES, level: 1 });
   });
@@ -356,12 +384,14 @@ describe('windmaster match', () => {
   it('has no wind of its own: it stays calm until the Wind Master asks', () => {
     const m = wm();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     for (let i = 0; i < 60 * 30; i++) { drive(m, 1, { walk: false }); m.update(DT); expect(m.sessions[1].forecast.state).toBe('calm'); }
   });
 
   it('a gust: a 1.8 s forecast warning, then the gust, then calm', () => {
     const m = wm();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     tick(m, 30);
     expect(m.gustReady).toBe(true);
     expect(m.input(2, { t: 'gust', dir: -1 })).toBe(true);
@@ -387,6 +417,7 @@ describe('windmaster match', () => {
     expect(difficulty(1).maxWind).toBeLessThan(WIND_MASTER_MIN_FORCE);
     const m = wm();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     m.input(2, { t: 'gust', dir: 1 });
     m.update(DT);
     expect(m.sessions[1].forecast.strength).toBeCloseTo(WIND_MASTER_MIN_FORCE / MAX_WIND, 6);
@@ -410,6 +441,7 @@ describe('windmaster match', () => {
     const lean = (dir) => {
       const m = wm();
       m.start();
+      onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
       m.input(2, { t: 'gust', dir });
       tick(m, 60 * 3); // no tilt from the walker: the wind alone moves the lean
       return m.sessions[1].walker.leanVel;
@@ -420,6 +452,7 @@ describe('windmaster match', () => {
   it('holds the cooldown: gusts too close together are refused, then allowed', () => {
     const m = wm();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m.input(2, { t: 'gust', dir: 1 })).toBe(true);
     expect(m.gustReady).toBe(false);
     expect(m.input(2, { t: 'gust', dir: -1 })).toBe(false);
@@ -435,6 +468,7 @@ describe('windmaster match', () => {
   it('ignores gusts from the walker, and walker inputs from the Wind Master', () => {
     const m = wm();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m.input(1, { t: 'gust', dir: 1 })).toBe(false);
     expect(m.gustReady).toBe(true); // nothing was booked
     expect(m.input(2, { t: 'walk', on: true })).toBe(false);
@@ -453,6 +487,7 @@ describe('windmaster match', () => {
     expect(m.input(2, { t: 'gust', dir: 1 })).toBe(false);
     expect(m.gustReady).toBe(false);
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     m.togglePause();
     expect(m.paused).toBe(true);
     expect(m.gustReady).toBe(false);
@@ -468,6 +503,7 @@ describe('windmaster match', () => {
   it('counts a fall caused by a gust, but not one with no wind or a step into a gap', () => {
     const m = wm();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     const s = m.sessions[1];
     const topple = () => { s.walker = { ...s.walker, lean: 1.2 }; m.update(DT); };
     // calm fall
@@ -504,6 +540,7 @@ describe('windmaster match', () => {
   it('a fall just after a gust ended still counts for the Wind Master', () => {
     const m = wm();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     const s = m.sessions[1];
     m.input(2, { t: 'gust', dir: 1 });
     tick(m, Math.round(60 * (WIND_WARNING_S + CONTROLLED_GUST_S + 0.5)));
@@ -527,6 +564,7 @@ describe('windmaster match', () => {
   it('swaps the roles after a cleared level, scores both players, and starts the walker fresh on the next level', () => {
     const m = wm();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     runUntil(m, () => m.phase !== 'playing', 200, () => drive(m, 1));
     expect(m.phase).toBe('roundOver');
     expect(m.result).toMatchObject({ kind: 'windmaster', round: 1, level: 1, walker: 1, windMaster: 2, outcome: 'won', fallsCaused: 0 });
@@ -536,6 +574,7 @@ describe('windmaster match', () => {
     expect(m.walkerOf()).toBe(2);
     expect(m.windMasterOf()).toBe(1);
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m).toMatchObject({ phase: 'playing', round: 2, level: 2 });
     expect(m.sessions[1]).toMatchObject({ phase: 'playing', lives: START_LIVES, level: 2, levelFalls: 0, time: 0 });
     expect(m.input(1, { t: 'walk', on: true })).toBe(false); // the old walker is now the Wind Master
@@ -550,6 +589,7 @@ describe('windmaster match', () => {
   it('swaps roles after a game over too, and the next player retries the same level', () => {
     const m = wm();
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     const s = m.sessions[1];
     for (let i = 0; i < START_LIVES; i++) {
       s.walker = { ...s.walker, lean: 1.2 };
@@ -560,6 +600,7 @@ describe('windmaster match', () => {
     expect(m.result).toMatchObject({ outcome: 'gameover', walker: 1, windMaster: 2, fallsCaused: 0, round: 1 });
     expect([m.walkerOf(), m.windMasterOf()]).toEqual([2, 1]);
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m).toMatchObject({ phase: 'playing', round: 2, level: 1 });
     expect(s).toMatchObject({ lives: START_LIVES, phase: 'playing', level: 1 });
   });
@@ -567,10 +608,12 @@ describe('windmaster match', () => {
   it('keeps score across rounds, then ends the match and names a winner', () => {
     const m = wm({ rounds: 2 });
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     runUntil(m, () => m.phase !== 'playing', 200, () => drive(m, 1)); // round 1: P1 clears level 1
     expect(m.phase).toBe('roundOver');
     const p1 = m.scores[1];
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     const s = m.sessions[1];
     for (let i = 0; i < START_LIVES; i++) { // round 2: P2 walks and falls out
       s.walker = { ...s.walker, lean: 1.2 };
@@ -581,6 +624,7 @@ describe('windmaster match', () => {
     expect(m.result).toMatchObject({ round: 2, walker: 2, windMaster: 1, outcome: 'gameover', matchWinner: 1 });
     expect(m.scores).toEqual({ 1: p1, 2: 0 });
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m).toMatchObject({ phase: 'playing', round: 1, level: 1, scores: { 1: 0, 2: 0 } });
     expect(m.walkerOf()).toBe(1);
   });
@@ -593,6 +637,7 @@ describe('windmaster match', () => {
     const m = wm();
     expect(m.canChangeMode).toBe(true);
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m.canChangeMode).toBe(false);
   });
 });

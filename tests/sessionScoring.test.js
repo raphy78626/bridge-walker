@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createSession, distanceToNextGap, START_LIVES, FALL_DURATION } from '../src/game/session.js';
 import { difficulty } from '../src/game/difficulty.js';
 import { scoreLevel } from '../src/game/scoring.js';
+import { onBridge } from './helpers/onBridge.js';
 
 const DT = 1 / 60;
 const steady = (w) => Math.max(-1, Math.min(1, -2 * w.lean - 0.5 * w.leanVel));
@@ -28,6 +29,7 @@ describe('session scoring state', () => {
     const s = createSession({ seed: 5 });
     expect(s).toMatchObject({ levelFalls: 0, runScore: 0, result: null });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.parTime).toBe(difficulty(1).parTime);
     expect(s.result).toBe(null);
   });
@@ -36,12 +38,14 @@ describe('session scoring state', () => {
     const s = createSession({ seed: 5 });
     s.level = 4;
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.parTime).toBe(difficulty(4).parTime);
   });
 
   it('counts a balance fall and a gap fall as falls, and a respawn does not reset them', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.walker = { ...s.walker, lean: 1.2 };
     s.update(DT);
     expect(s.fallCause).toBe('balance');
@@ -61,12 +65,14 @@ describe('session scoring state', () => {
   it('resets levelFalls when the next level starts', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     until(s, 'falling', 60); // idle: toppled by a gust
     until(s, 'playing', 5);
     expect(s.levelFalls).toBe(1);
     winLevel(s);
     expect(s.result.falls).toBe(1);
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.level).toBe(2);
     expect(s.levelFalls).toBe(0);
   });
@@ -74,6 +80,7 @@ describe('session scoring state', () => {
   it('sets a level result when won, with this level already in runScore', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     winLevel(s);
     const expected = scoreLevel({ level: 1, time: s.time, falls: 0, parTime: s.parTime });
     expect(s.result).toEqual({
@@ -85,9 +92,11 @@ describe('session scoring state', () => {
   it('accumulates runScore across levels, and start() clears the result', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     winLevel(s);
     const first = s.result.score;
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.result).toBe(null);
     expect(s.runScore).toBe(first);
     winLevel(s);
@@ -100,13 +109,16 @@ describe('session scoring state', () => {
   it('sets a run result on game over and resets runScore only when the next run starts', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     winLevel(s);
     s.start(); // level 2
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     const banked = s.runScore;
     expect(until(s, 'gameover', 300)).toBe('gameover'); // idle until every life is gone
     expect(s.result).toEqual({ kind: 'run', level: 2, runScore: banked });
     expect(s.runScore).toBe(banked);
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.level).toBe(1);
     expect(s.runScore).toBe(0);
     expect(s.result).toBe(null);
@@ -116,6 +128,7 @@ describe('session scoring state', () => {
   it('keeps result null while playing, falling and respawning', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.result).toBe(null);
     until(s, 'falling', 60);
     expect(s.result).toBe(null);
@@ -126,6 +139,7 @@ describe('session scoring state', () => {
   it('still counts time for the level only while playing', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.walker = { ...s.walker, lean: 1.2 };
     s.update(DT);
     const t = s.time;

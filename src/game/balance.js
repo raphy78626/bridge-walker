@@ -14,6 +14,7 @@ const WALK_WOBBLE = 1.2; // walking multiplies instability by this
 const RUN_WOBBLE = 1.6; // running multiplies it by this (standing, and being airborne, use 1)
 const CONTROL = 3.0; // how hard a full phone tilt pushes back (4.0 felt too sensitive)
 const DAMPING = 1.6; // higher = calmer, slower sway
+const GROUND_SETTLE = 6; // per second: how fast he straightens up on solid rock
 
 export function createWalker() {
   return { lean: 0, leanVel: 0, z: 0, fallen: false, y: 0, vy: 0, airborne: false, speed: 0 };
@@ -22,7 +23,9 @@ export function createWalker() {
 // One physics step. tilt in [-1, 1], wind in lean-acceleration units, dt in seconds.
 // instability multiplies how fast a lean grows on its own (1 = the level-1 feel; difficulty.js raises it per level).
 // running overrides walking. jump is a one-shot: it starts a jump only from the ground.
-export function stepWalker(w, { tilt, walking, running = false, jump = false, wind, instability: level = 1 }, dt) {
+// ground: on the rock ledges at either end of the bridge. Solid footing: he steadies himself upright and cannot
+// fall, whatever the lean, tilt or wind; walking, running and jumping work as usual.
+export function stepWalker(w, { tilt, walking, running = false, jump = false, wind, instability: level = 1, ground = false }, dt) {
   if (w.fallen) return w;
 
   const inputSpeed = running ? RUN_SPEED : walking ? WALK_SPEED : 0;
@@ -33,11 +36,18 @@ export function stepWalker(w, { tilt, walking, running = false, jump = false, wi
     speed = Math.max(inputSpeed * RUN_JUMP_BOOST, JUMP_FORWARD); // held constant until landing
   }
 
-  // In the air the lean is as unstable as standing still, whatever the feet were doing.
-  const instability = GRAVITY * level * (airborne ? 1 : running ? RUN_WOBBLE : walking ? WALK_WOBBLE : 1);
-  const acc = instability * Math.sin(w.lean) + wind + CONTROL * tilt - DAMPING * w.leanVel;
-  const leanVel = w.leanVel + acc * dt;
-  const lean = w.lean + leanVel * dt;
+  let lean;
+  let leanVel;
+  if (ground) {
+    leanVel = 0;
+    lean = w.lean * Math.exp(-GROUND_SETTLE * dt);
+  } else {
+    // In the air the lean is as unstable as standing still, whatever the feet were doing.
+    const instability = GRAVITY * level * (airborne ? 1 : running ? RUN_WOBBLE : walking ? WALK_WOBBLE : 1);
+    const acc = instability * Math.sin(w.lean) + wind + CONTROL * tilt - DAMPING * w.leanVel;
+    leanVel = w.leanVel + acc * dt;
+    lean = w.lean + leanVel * dt;
+  }
 
   let dz;
   if (!airborne) {
@@ -60,7 +70,7 @@ export function stepWalker(w, { tilt, walking, running = false, jump = false, wi
     }
   }
 
-  const fallen = Math.abs(lean) > FALL_ANGLE;
+  const fallen = !ground && Math.abs(lean) > FALL_ANGLE;
   if (fallen) return { lean, leanVel, z: w.z + dz, fallen, y: 0, vy: 0, airborne: false, speed: 0 };
   return { lean, leanVel, z: w.z + dz, fallen, y, vy, airborne, speed };
 }

@@ -11,6 +11,13 @@ export const BRIDGE_LENGTH = 60; // metres
 export const START_LIVES = 3;
 export const FALL_DURATION = 2.5; // seconds the fall animation plays before respawn
 const GAP_RESPAWN_BACK = 1.5; // metres before the gap you fell into that you get put back
+// Each level starts on the rock ledge before the bridge: solid ground, a safe place to get ready. The level timer
+// (and with it the wind) only starts once he steps onto the bridge.
+export const START_Z = -2.5;
+// On the bridge he has to keep moving. Standing still is fine for IDLE_GRACE seconds; after that the bridge
+// swings him harder and harder (IDLE_PUSH per second, more than a full tilt can hold within a few seconds).
+export const IDLE_GRACE = 2;
+const IDLE_PUSH = 1.2;
 
 // Options (all optional; the defaults are the solo game):
 //   infiniteLives: falls still cost time and count in levelFalls, but lives never run out (race mode).
@@ -27,6 +34,7 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
     time: 0, // seconds on the bridge this level
     phaseTime: 0, // seconds since the current phase began
     walker: createWalker(),
+    idleTime: 0, // seconds standing still on the bridge; the TV and phone say "keep moving" as it builds
     fallCause: null, // 'balance' | 'gap' | null: why we are in (or just left) the falling phase
     gaps: [], // [{ start, end }] metres along the bridge; a new array each time a level begins
     levelFalls: 0, // falls this level (a gap fall and a balance fall both count)
@@ -70,7 +78,8 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
       s.result = null;
       s.paused = false;
       instability = d.instability;
-      s.walker = createWalker();
+      s.walker = { ...createWalker(), z: START_Z };
+      s.idleTime = 0;
       s.gaps = generateGaps(seed, s.level, BRIDGE_LENGTH);
       s.fallCause = null;
       const windParams = { seed: seed + s.level, maxForce: d.maxWind, gustGapMin: d.gustGapMin, gustGapMax: d.gustGapMax };
@@ -84,11 +93,15 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
       if (s.paused || s.halted) return;
       s.phaseTime += dt;
       if (s.phase === 'playing') {
-        s.time += dt;
+        const onBridge = s.walker.z >= 0 && s.walker.z < BRIDGE_LENGTH;
+        if (onBridge || s.time > 0) s.time += dt; // the clock (and the wind) start with the first step on the bridge
         const { tilt, walking, running } = s.input;
         const onFeet = (walking || running) && !s.walker.airborne;
+        s.idleTime = onBridge && !onFeet && !s.walker.airborne ? s.idleTime + dt : 0;
+        const idlePush = s.idleTime > IDLE_GRACE ? IDLE_PUSH * (s.idleTime - IDLE_GRACE) * (Math.sign(s.walker.lean) || 1) : 0;
         const sway = onFeet ? 0.15 * Math.sin(s.time * 11) : 0; // footsteps rock the walker
-        s.walker = stepWalker(s.walker, { tilt, walking, running, jump, wind: wind.force(s.time) + sway, instability }, dt);
+        const push = onBridge ? wind.force(s.time) + sway + idlePush : 0;
+        s.walker = stepWalker(s.walker, { tilt, walking, running, jump, wind: push, instability, ground: !onBridge }, dt);
         if (s.walker.fallen) {
           loseLife('balance');
         } else if (!s.walker.airborne && gapAt(s.gaps, s.walker.z)) {
@@ -110,6 +123,7 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
       } else if (s.phase === 'falling' && s.phaseTime >= FALL_DURATION) {
         if (s.lives > 0 || infiniteLives) {
           s.walker = { ...createWalker(), z: respawnZ() };
+          s.idleTime = 0;
           s.fallCause = null;
           enter('playing');
         } else {

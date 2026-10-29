@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createSession, BRIDGE_LENGTH } from '../src/game/session.js';
+import { onBridge } from './helpers/onBridge.js';
 
 const DT = 1 / 60;
 const run = (s, seconds) => {
@@ -10,6 +11,7 @@ describe('pause', () => {
   it('freezes the walker, the level timer and the wind while paused', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.input.walking = true;
     run(s, 1);
     s.togglePause();
@@ -25,6 +27,7 @@ describe('pause', () => {
   it('resumes exactly where it stopped', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.input.walking = true;
     run(s, 1);
     s.togglePause();
@@ -41,9 +44,11 @@ describe('pause', () => {
     s.togglePause(); // lobby: nothing to pause
     expect(s.paused).toBe(false);
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.togglePause();
     expect(s.paused).toBe(true);
     s.start(); // ignored while playing, still paused
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s.paused).toBe(true);
     s.togglePause();
     expect(s.paused).toBe(false);
@@ -56,6 +61,7 @@ describe('pause', () => {
     };
     const falling = createSession({ seed: 5 });
     falling.start();
+    onBridge(falling); // levels start on the safe ledge; these tests begin on the first plank
     expect(run(falling, 'falling')).toBe('falling'); // idle until a gust knocks him off
     falling.togglePause();
     expect(falling.paused).toBe(false);
@@ -63,6 +69,7 @@ describe('pause', () => {
 
     const won = createSession({ seed: 5 });
     won.start();
+    onBridge(won); // levels start on the safe ledge; these tests begin on the first plank
     won.walker = { ...won.walker, z: BRIDGE_LENGTH - 0.05, y: 0, vy: 0, airborne: false };
     won.input.walking = true;
     expect(run(won, 'won')).toBe('won');
@@ -72,6 +79,7 @@ describe('pause', () => {
 
     const over = createSession({ seed: 5 });
     over.start();
+    onBridge(over); // levels start on the safe ledge; these tests begin on the first plank
     expect(run(over, 'gameover')).toBe('gameover');
     over.togglePause();
     expect(over.paused).toBe(false);
@@ -80,6 +88,7 @@ describe('pause', () => {
   it('drops a jump pressed while paused', () => {
     const s = createSession({ seed: 5 });
     s.start();
+    onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     s.togglePause();
     s.input.jump = true;
     s.update(DT);
