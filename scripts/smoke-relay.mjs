@@ -1,6 +1,7 @@
 // Pairs a fake TV and two phones through a running server, the way the real ones connect, and checks: a tilt arrives
 // stamped with the phone's player number (a spoofed p is overwritten), a state with `to` reaches only that phone, a
-// broadcast state reaches both, a third phone gets room-full, and a leaving phone frees its slot.
+// broadcast state reaches both, a third phone gets room-full, a leaving phone frees its slot, and a phone that reconnects
+// with its id while its old socket still holds the slot takes that slot over (same player, the old socket closed, no peer-left).
 // Usage: node scripts/smoke-relay.mjs [httpsPort]   (5173 for `npm run dev`, 5174 for `npm run tv`; default 5174)
 // The TV connects over plain HTTP on httpsPort + 10, the phone over HTTPS on httpsPort.
 import assert from 'node:assert/strict';
@@ -50,17 +51,17 @@ try {
   tv.send(JSON.stringify({ t: 'join', role: 'tv' }));
   const { room } = await tvIn.next('TV room code');
 
-  const join = async (what) => {
+  const join = async (what, id) => {
     const ws = await open(phoneUrl, what);
     const box = inbox(ws);
-    ws.send(JSON.stringify({ t: 'join', role: 'phone', room }));
+    ws.send(JSON.stringify({ t: 'join', role: 'phone', room, ...(id ? { id } : {}) }));
     return { ws, box, hello: await box.next(`${what} pairing reply`) };
   };
 
-  const p1 = await join('phone 1');
+  const p1 = await join('phone 1', 'smoke-phone-one');
   assert.deepEqual(p1.hello, { t: 'paired', player: 1 });
   assert.deepEqual(await tvIn.next('TV pairing notice for player 1'), { t: 'paired', player: 1 });
-  const p2 = await join('phone 2');
+  const p2 = await join('phone 2', 'smoke-phone-two');
   assert.deepEqual(p2.hello, { t: 'paired', player: 2 });
   assert.deepEqual(await tvIn.next('TV pairing notice for player 2'), { t: 'paired', player: 2 });
   console.log('room', room, 'phone 1 and 2 paired');
@@ -98,7 +99,25 @@ try {
   assert.deepEqual(await tvIn.next('TV pairing notice for the new player 1'), { t: 'paired', player: 1 });
   console.log('slot 1 freed and reused');
 
-  for (const ws of [tv, p2.ws, p3.ws, p4.ws]) ws.close();
+  // A reconnect: phone 2's link "dies" but its socket stays open on the server. It comes back with its id and must get player 2
+  // again (not room-full, not another number), with its old socket closed and the TV told only a repeat pairing.
+  const oldClosed = new Promise((resolve) => p2.ws.once('close', resolve));
+  const p2b = await join('phone 2 again', 'smoke-phone-two');
+  assert.deepEqual(p2b.hello, { t: 'paired', player: 2 });
+  assert.deepEqual(await tvIn.next('TV repeat pairing for player 2'), { t: 'paired', player: 2 });
+  await withTimeout(oldClosed, 'the old phone 2 socket to be closed');
+  p2b.ws.send(JSON.stringify({ t: 'tilt', v: 0.25 }));
+  assert.deepEqual(await tvIn.next('tilt from the reconnected phone 2'), { t: 'tilt', v: 0.25, p: 2 }, 'no peer-left may come first');
+  p4.ws.send(JSON.stringify({ t: 'tilt', v: 0.5 }));
+  assert.deepEqual(await tvIn.next('tilt from player 1 after the reconnect'), { t: 'tilt', v: 0.5, p: 1 });
+  console.log('reconnect with an id took player 2 back; old socket closed; no peer-left');
+
+  // An invalid id is dropped (the join goes ahead as an anonymous phone): the room is full, so it is turned away.
+  const bad = await join('phone with a bad id', 'not valid!');
+  assert.deepEqual(bad.hello, { t: 'error', reason: 'room-full' });
+  console.log('a malformed id is ignored:', bad.hello);
+
+  for (const ws of [tv, p2b.ws, p3.ws, p4.ws, bad.ws]) ws.close();
   console.log('smoke ok');
 } catch (err) {
   console.error('smoke test failed:', err.message);
