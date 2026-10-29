@@ -15,13 +15,21 @@ const ROOM_RE = /^[A-Z]{4}$/;
 
 export const encode = (msg) => JSON.stringify(msg);
 
-export function decode(raw) {
+// A phone message reaches the TV stamped by the server with the sender's slot (p: 1|2). The server's own decode strips any
+// p a phone claims (it stamps the real one afterwards); the TV's client passes { keepPlayer: true } to keep the server's.
+export function decode(raw, { keepPlayer = false } = {}) {
   let msg;
   try {
     msg = JSON.parse(raw);
   } catch {
     return null;
   }
+  const out = decodeMessage(msg);
+  if (keepPlayer && out && PHONE_TYPES.has(out.t) && (msg.p === 1 || msg.p === 2)) out.p = msg.p;
+  return out;
+}
+
+function decodeMessage(msg) {
   if (!msg || typeof msg !== 'object' || typeof msg.t !== 'string') return null;
   switch (msg.t) {
     case 'join':

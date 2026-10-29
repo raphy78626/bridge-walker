@@ -99,3 +99,30 @@ describe('protocol', () => {
     for (const to of [0, 3, '1', [1]]) expect(decode(encode({ t: 'state', phase: 'lobby', to }))).toBeNull();
   });
 });
+
+describe('player stamp', () => {
+  const keep = (m) => decode(encode(m), { keepPlayer: true });
+  it('is stripped by default (the server decodes what a phone sends and stamps the real slot itself)', () => {
+    expect(decode(encode({ t: 'tilt', v: 0.5, p: 2 }))).toEqual({ t: 'tilt', v: 0.5 });
+  });
+
+  it('keeps the slot the server stamped on a phone message, for every phone type, when the TV asks', () => {
+    expect(keep({ t: 'tilt', v: 0.5, p: 2 })).toEqual({ t: 'tilt', v: 0.5, p: 2 });
+    expect(keep({ t: 'walk', on: true, p: 1 })).toEqual({ t: 'walk', on: true, p: 1 });
+    expect(keep({ t: 'run', on: false, p: 2 })).toEqual({ t: 'run', on: false, p: 2 });
+    expect(keep({ t: 'jump', p: 2 })).toEqual({ t: 'jump', p: 2 });
+    expect(keep({ t: 'gust', dir: -1, p: 2 })).toEqual({ t: 'gust', dir: -1, p: 2 });
+    expect(keep({ t: 'mode', mode: 'race', p: 1 })).toEqual({ t: 'mode', mode: 'race', p: 1 });
+    expect(keep({ t: 'start', p: 2 })).toEqual({ t: 'start', p: 2 });
+  });
+
+  it('drops a stamp that is not a player slot, and adds none where there was none', () => {
+    for (const p of [0, 3, '1', null, 1.5, [1]]) expect(keep({ t: 'tilt', v: 0, p })).toEqual({ t: 'tilt', v: 0 });
+    expect(keep({ t: 'jump' })).toEqual({ t: 'jump' });
+  });
+
+  it('does not add a stamp to a join', () => {
+    expect(keep({ t: 'join', role: 'tv', p: 2 })).toEqual({ t: 'join', role: 'tv' });
+    expect(keep({ t: 'join', role: 'phone', room: 'ABCD', p: 2 })).toEqual({ t: 'join', role: 'phone', room: 'ABCD' });
+  });
+});

@@ -7,7 +7,7 @@ export function connect(onMessage, onOpen, onClose) {
   ws.addEventListener('open', () => onOpen?.());
   ws.addEventListener('close', () => onClose?.());
   ws.addEventListener('message', (e) => {
-    const msg = decode(e.data);
+    const msg = decode(e.data, { keepPlayer: true }); // the TV needs the server's player stamp (phones ignore it)
     if (msg) onMessage(msg);
   });
   return {

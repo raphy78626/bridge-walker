@@ -43,6 +43,14 @@ describe('connect', () => {
     expect(msgs).toEqual([{ t: 'paired' }]);
   });
 
+  it('hands the TV the player slot the server stamped on a phone message', () => {
+    const msgs = [];
+    const conn = connect((m) => msgs.push(m));
+    conn.ws.emit('message', { data: JSON.stringify({ t: 'tilt', v: 0.5, p: 2 }) });
+    conn.ws.emit('message', { data: JSON.stringify({ t: 'walk', on: true, p: 1 }) });
+    expect(msgs).toEqual([{ t: 'tilt', v: 0.5, p: 2 }, { t: 'walk', on: true, p: 1 }]);
+  });
+
   it('calls onClose when the socket closes', () => {
     let closed = 0;
     const conn = connect(() => {}, undefined, () => closed++);
