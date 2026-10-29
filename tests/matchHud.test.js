@@ -233,6 +233,18 @@ describe('KEEP MOVING', () => {
     expect(v.players[2].keepMoving).toBe(false);
   });
 
+  it('a halted lane (the race loser, frozen where he stands) stops warning', () => {
+    expect(keepMovingOf(sess({ idleTime: 3, halted: true }))).toBe(false);
+    const m = createMatch({ mode: 'race', seed: 2 });
+    m.start();
+    matchToBridge(m);
+    for (let i = 0; i < 60; i++) m.update(DT); // both stand still for a second: both warned
+    expect(raceHudView(m).players[2].keepMoving).toBe(true);
+    m.sessions[2].halt(); // the round ended for him
+    expect(m.sessions[2].idleTime).toBeGreaterThan(KEEP_MOVING_AFTER_S); // idleTime stays frozen...
+    expect(raceHudView(m).players[2].keepMoving).toBe(false); // ...but the warning goes
+  });
+
   it('a racer still on the ledge is not warned, and his metres never go negative', () => {
     const m = createMatch({ mode: 'race', seed: 2 });
     m.start();

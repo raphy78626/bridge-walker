@@ -71,17 +71,24 @@ describe('nextQuality', () => {
   describe('TV_QUALITY (50 Hz panel, weak GPU)', () => {
     const tv = (fps, over) => nextQuality(fps, start({ scale: 0.75, ...over }), TV_QUALITY);
 
-    it('never drops below 0.6, which stays sharp enough on a big screen', () => {
+    it('never drops below 0.7: the floor is the ceiling, so the scale cannot bounce between two sizes', () => {
+      expect(TV_QUALITY.minScale).toBe(0.7);
+      expect(TV_QUALITY.minScale).toBe(TV_QUALITY.maxScale);
       let s = start({ scale: 0.75 });
       for (let i = 0; i < 6; i++) s = nextQuality(20, s, TV_QUALITY);
-      expect(s.scale).toBe(0.6);
+      expect(s.scale).toBe(0.7);
     });
 
-    it('wins resolution back at 46-50 fps after dropping, but only up to its 0.7 ceiling', () => {
-      const once = nextQuality(48, start({ scale: 0.6, shadows: false }), TV_QUALITY);
-      expect(once.goodStreak).toBe(1);
-      expect(nextQuality(48, once, TV_QUALITY).scale).toBe(0.7);
-      expect(nextQuality(48, { scale: 0.7, shadows: false, goodStreak: 1 }, TV_QUALITY).scale).toBe(0.7);
+    it('never changes scale once it sits at 0.7, whatever the fps readings do', () => {
+      let s = { scale: 0.7, shadows: false, goodStreak: 0 };
+      for (let i = 0; i < 400; i++) {
+        s = nextQuality([5, 20, 36, 40, 44, 48, 50, 60][i % 8], s, TV_QUALITY);
+        expect(s.scale).toBe(0.7);
+      }
+    });
+
+    it('a scale above the ceiling (0.8) still steps down to 0.7 on a slow reading', () => {
+      expect(nextQuality(30, start({ scale: 0.8, shadows: false }), TV_QUALITY).scale).toBe(0.7);
     });
 
     it('holds steady in the 38-46 fps band', () => {
@@ -103,21 +110,20 @@ describe('nextQuality', () => {
       }
     });
 
-    it('a long run of readings never turns shadows on, and still adapts the scale', () => {
+    it('a long run of readings never turns shadows on', () => {
       let s = { scale: 0.7, shadows: false, goodStreak: 0 };
-      const seen = new Set();
       for (let i = 0; i < 400; i++) {
         s = nextQuality([20, 36, 40, 44, 48, 50][i % 6], s, TV_QUALITY);
         expect(s.shadows).toBe(false);
-        seen.add(s.scale);
       }
-      expect(seen.size).toBeGreaterThan(1);
     });
 
     it('goes straight to resolution at 48 fps, with no shadow step first', () => {
+      // Only reachable from a scale below the ceiling (the generic rules still work with other options).
       let s = { scale: 0.6, shadows: false, goodStreak: 0 };
-      s = nextQuality(48, s, TV_QUALITY);
-      s = nextQuality(48, s, TV_QUALITY);
+      const loose = { ...TV_QUALITY, minScale: 0.6 };
+      s = nextQuality(48, s, loose);
+      s = nextQuality(48, s, loose);
       expect(s).toEqual({ scale: 0.7, shadows: false, goodStreak: 0 });
     });
 
