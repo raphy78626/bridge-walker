@@ -22,6 +22,9 @@ export const LEDGE_CLOCK_START_S = 4;
 export const IDLE_GRACE = 2;
 const IDLE_PUSH = 1.2;
 const LEASH_GAP_MARGIN = 0.1; // a leash that ends over a gap holds him this far before its near edge instead
+// He counts as waiting this close to the limit, in the air too: he catches up with a moving limit in small steps and hops,
+// and "WAIT FOR P2" must not blink on and off with each one.
+const LEASH_NEAR = 0.6;
 
 // Options (all optional; the defaults are the solo game):
 //   infiniteLives: falls still cost time and count in levelFalls, but lives never run out (race mode).
@@ -128,7 +131,7 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
           s.walker.z = Math.max(prevZ, limit);
           s.walker.speed = 0;
         }
-        s.waiting = !s.walker.airborne && s.walker.z >= limit - 0.01;
+        s.waiting = s.walker.z >= limit - LEASH_NEAR;
         if (s.walker.fallen) {
           loseLife('balance');
         } else if (!s.walker.airborne && gapAt(s.gaps, s.walker.z)) {

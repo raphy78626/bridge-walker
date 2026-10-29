@@ -157,3 +157,21 @@ describe('the leash on screen', () => {
     expect(matchStateFor(m, 1).waiting).toBe(false);
   });
 });
+
+describe('WAIT FOR P2 does not blink', () => {
+  it('stays on, step after step, while he keeps pace with a moving limit', () => {
+    const m = calmRace();
+    play(m, 8); // P1 reaches the leash while P2 stands on the ledge
+    expect(m.sessions[1].waiting).toBe(true);
+    let flips = 0;
+    let last = m.sessions[1].waiting;
+    play(m, 15, {
+      walk2: true,
+      each: () => {
+        if (m.sessions[1].waiting !== last) { flips += 1; last = m.sessions[1].waiting; }
+      },
+    });
+    expect(last).toBe(true);
+    expect(flips).toBe(0);
+  });
+});
