@@ -12,15 +12,27 @@ describe('race HUD view-model', () => {
   it('a panel per racer in his colour, with metres, time and falls, and the round line', () => {
     const m = createMatch({ mode: 'race', seed: 2 });
     m.start();
+    for (let i = 0; i < 60 * 65.2; i++) m.update(DT); // 1:05 on the round clock
     m.sessions[1].walker = { ...m.sessions[1].walker, z: 23.7 };
     m.sessions[1].levelFalls = 1;
     m.sessions[2].walker = { ...m.sessions[2].walker, z: 5 };
-    m.sessions[2].time = 65.2;
     const v = raceHudView(m);
-    expect(v.players[1]).toMatchObject({ name: 'P1', color: PLAYER_COLORS[1], dist: '23 / 60 m', falls: '1 fall', time: '00:00' });
+    expect(v.players[1]).toMatchObject({ name: 'P1', color: PLAYER_COLORS[1], dist: '23 / 60 m', falls: '1 fall', time: '01:05' });
     expect(v.players[2]).toMatchObject({ name: 'P2', color: PLAYER_COLORS[2], dist: '5 / 60 m', falls: '0 falls', time: '01:05' });
     expect(v.players[1].progress).toBeCloseTo(23.7 / 60);
     expect(v.roundLine).toBe('Round 1 · P1 0 – 0 P2');
+  });
+
+  it('both panels show the one round clock, even when a lane is still on the ledge', () => {
+    const m = createMatch({ mode: 'race', seed: 2 });
+    m.start();
+    matchToBridge(m);
+    m.sessions[2].walker = { ...m.sessions[2].walker, z: -2.5 };
+    for (let i = 0; i < 60 * 3 + 1; i++) m.update(DT);
+    expect(m.sessions[2].time).toBe(0); // his lane clock has not started...
+    const v = raceHudView(m);
+    expect(v.players[1].time).toBe('00:03'); // ...but the panels read the round's
+    expect(v.players[2].time).toBe('00:03');
   });
 
   it('shows the round number and the tally as the match goes on', () => {

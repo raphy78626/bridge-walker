@@ -199,8 +199,8 @@ export function createHud(doc = document, timers = globalThis) {
       const k = raceKeys;
       const d1 = Math.max(0, Math.floor(a.walker.z));
       const d2 = Math.max(0, Math.floor(b.walker.z));
-      const t1 = Math.floor(a.time);
-      const t2 = Math.floor(b.time);
+      const t1 = Math.floor(match.elapsed);
+      const t2 = t1; // one round clock for both lanes
       const dot1 = Math.round((Math.max(0, a.walker.z) * 200) / BRIDGE_LENGTH);
       const dot2 = Math.round((Math.max(0, b.walker.z) * 200) / BRIDGE_LENGTH);
       const tally = match.tally;

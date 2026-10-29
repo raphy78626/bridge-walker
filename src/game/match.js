@@ -86,17 +86,16 @@ function createRace(seed, winsToWin) {
     2: createSession({ seed, infiniteLives: true, ledgeClockAfter: LEDGE_CLOCK_START_S }),
   };
   const both = [sessions[1], sessions[2]];
-  const m = { phase: 'lobby', round: 1, result: null, tally: { 1: 0, 2: 0 }, scores: { 1: 0, 2: 0 } };
+  // elapsed is the round's own clock, from start() of the round: the one race times and tie-breaks use. A lane's session.time
+  // leaves out the ledge wait (and a fall's animation), so two lanes' times are not comparable.
+  const m = { phase: 'lobby', round: 1, result: null, tally: { 1: 0, 2: 0 }, scores: { 1: 0, 2: 0 }, elapsed: 0 };
 
   function finish() {
     const done = [1, 2].filter((p) => sessions[p].phase === 'won');
     if (!done.length) return;
-    // Both over the line in the same tick: the quicker time wins, then whoever got furthest past, then player 1.
-    const winner = done.reduce((a, b) => {
-      const [x, y] = [sessions[a], sessions[b]];
-      if (x.time !== y.time) return x.time < y.time ? a : b;
-      return x.walker.z >= y.walker.z ? a : b;
-    });
+    // Lanes are checked every tick, so everyone who finished did so on this tick, at the same elapsed time: the tie goes to
+    // whoever got furthest past, then to player 1. (Not to the lane clock, which a ledge wait skews.)
+    const winner = done.reduce((a, b) => (sessions[a].walker.z >= sessions[b].walker.z ? a : b));
     for (const s of both) if (s.phase !== 'won') s.halt();
     m.tally[winner] += 1;
     m.scores[winner] += sessions[winner].result.score;
@@ -106,7 +105,7 @@ function createRace(seed, winsToWin) {
       round: m.round,
       level: m.round,
       winner,
-      times: { 1: sessions[1].time, 2: sessions[2].time },
+      times: { 1: m.elapsed, 2: m.elapsed }, // the shared round clock; a lane that did not finish shows DNF
       falls: { 1: sessions[1].levelFalls, 2: sessions[2].levelFalls },
       finished: { 1: sessions[1].phase === 'won', 2: sessions[2].phase === 'won' },
       stars: sessions[winner].result.stars,
@@ -128,6 +127,7 @@ function createRace(seed, winsToWin) {
     get result() { return m.result; },
     get tally() { return copy2(m.tally); },
     get scores() { return copy2(m.scores); },
+    get elapsed() { return m.elapsed; }, // seconds since this round's start(), not counting a pause
     get paused() { return sessions[1].paused; },
     gustReady: false,
     get canChangeMode() { return m.phase !== 'playing'; },
@@ -141,12 +141,14 @@ function createRace(seed, winsToWin) {
       if (m.phase === 'matchOver') Object.assign(m, { round: 1, tally: { 1: 0, 2: 0 }, scores: { 1: 0, 2: 0 } });
       else if (m.phase === 'roundOver') m.round += 1;
       m.result = null;
+      m.elapsed = 0;
       for (const s of both) s.start({ level: m.round, lives: START_LIVES, runScore: 0 });
       m.phase = 'playing';
     },
 
     update(dt) {
       if (m.phase !== 'playing') return;
+      if (!sessions[1].paused) m.elapsed += dt;
       for (const s of both) s.update(dt);
       finish();
     },

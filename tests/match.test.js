@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createMatch, WINDMASTER_ROUNDS, WIND_MASTER_MIN_FORCE, windMasterForce } from '../src/game/match.js';
+import { createWalker } from '../src/game/balance.js';
 import { createSession, distanceToNextGap, START_LIVES, FALL_DURATION, WIND_WARNING_S } from '../src/game/session.js';
 import { createControlledWind, GUST_COOLDOWN_S, CONTROLLED_GUST_S } from '../src/game/wind.js';
 import { forecastAt } from '../src/game/forecast.js';
@@ -271,7 +272,8 @@ describe('race match', () => {
       matchWinner: 0,
     });
     expect(m.result.times[1]).toBeGreaterThan(30);
-    expect(m.result.times[2]).toBeLessThan(m.result.times[1]); // he never stepped on: his clock only started after 4 s on the ledge
+    expect(m.result.times[2]).toBe(m.result.times[1]); // one round clock for both (his own lane clock only started after 4 s on the ledge)
+    expect(m.sessions[2].time).toBeLessThan(m.result.times[2]);
     expect(m.tally).toEqual({ 1: 1, 2: 0 });
     expect(m.scores[1]).toBe(m.sessions[1].result.score);
     expect(m.scores[2]).toBe(0);
@@ -301,6 +303,73 @@ describe('race match', () => {
     expect(m.phase).toBe('roundOver');
     expect(m.result.winner).toBe(1);
     expect(m.result.finished).toEqual({ 1: true, 2: true });
+  });
+
+  describe('the shared round clock', () => {
+    it('counts from start(), stands still while paused and after the round, and restarts with the next round', () => {
+      const m = race();
+      expect(m.elapsed).toBe(0);
+      m.start();
+      for (let i = 0; i < 120; i++) m.update(DT);
+      expect(m.elapsed).toBeCloseTo(2, 6); // the ledge wait counts: this is the clock on the wall
+      m.togglePause();
+      for (let i = 0; i < 120; i++) m.update(DT);
+      expect(m.elapsed).toBeCloseTo(2, 6);
+      m.togglePause();
+      m.update(DT);
+      expect(m.elapsed).toBeCloseTo(2 + DT, 6);
+      onBridge(m);
+      runUntil(m, () => m.phase !== 'playing', 120, () => { drive(m, 1); drive(m, 2, { walk: false }); });
+      const end = m.elapsed;
+      for (let i = 0; i < 60; i++) m.update(DT);
+      expect(m.elapsed).toBe(end);
+      m.start();
+      expect(m.elapsed).toBe(0);
+    });
+
+    it('the result times are that clock, for both lanes; the one who did not finish reads DNF', () => {
+      const m = race();
+      m.start();
+      onBridge(m);
+      m.sessions[2].walker = { ...m.sessions[2].walker, z: START_Z }; // player 2 waits on the ledge
+      runUntil(m, () => m.phase !== 'playing', 120, () => { drive(m, 1); drive(m, 2, { walk: false }); });
+      expect(m.result.times).toEqual({ 1: m.elapsed, 2: m.elapsed });
+      expect(m.result.times[1]).toBeGreaterThan(m.sessions[1].time - 1e-9); // never less than the lane clock
+      expect(m.result.finished).toEqual({ 1: true, 2: false });
+    });
+
+    // Player 1 steps on at once; player 2 waits on the ledge, so his lane clock (which skips the wait) runs well behind
+    // player 1's. Then both are put on the last metre and cross in the same frame.
+    function sameFrameFinish(z1, z2) {
+      const m = race();
+      m.start();
+      m.sessions[1].walker = { ...m.sessions[1].walker, z: 0 };
+      for (let i = 0; i < 60 * 5; i++) { drive(m, 1); drive(m, 2, { walk: false }); m.update(DT); }
+      expect(m.sessions[1].time).toBeGreaterThan(4.5);
+      expect(m.sessions[2].time).toBeLessThan(1.5); // the ledge wait is not in it
+      m.sessions[1].walker = { ...createWalker(), z: z1 };
+      m.sessions[2].walker = { ...createWalker(), z: z2 };
+      m.sessions[1].gaps = [];
+      m.sessions[2].gaps = [];
+      for (const p of [1, 2]) { m.input(p, { t: 'tilt', v: 0 }); m.input(p, { t: 'walk', on: true }); }
+      m.update(DT);
+      return m;
+    }
+
+    it('a same-frame finish after different ledge waits is not decided by the ledge wait: equal distance goes to player 1', () => {
+      const m = sameFrameFinish(59.99, 59.99);
+      expect(m.result.finished).toEqual({ 1: true, 2: true });
+      expect(m.sessions[2].time).toBeLessThan(m.sessions[1].time); // the lane clock would have given it to player 2
+      expect(m.result.winner).toBe(1);
+      expect(m.result.times[1]).toBe(m.result.times[2]);
+    });
+
+    it('...and the further walker wins, whatever his lane clock says', () => {
+      const m = sameFrameFinish(59.98, 59.995);
+      expect(m.result.finished).toEqual({ 1: true, 2: true });
+      expect(m.sessions[1].walker.z).toBeLessThan(m.sessions[2].walker.z);
+      expect(m.result.winner).toBe(2);
+    });
   });
 
   it('falls cost no lives, and the round goes on', () => {

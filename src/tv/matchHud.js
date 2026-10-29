@@ -39,7 +39,7 @@ export function raceHudView(match) {
       color: PLAYER_COLORS[p],
       dist: distText(s.walker.z),
       progress: clamp01(s.walker.z / BRIDGE_LENGTH),
-      time: mmss(s.time),
+      time: mmss(match.elapsed), // the shared round clock: a lane still on the ledge reads the same as the other
       falls: fallsText(s.levelFalls),
       keepMoving: keepMovingOf(s),
     };
