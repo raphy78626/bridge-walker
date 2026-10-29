@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FALL_ANGLE, WALK_SPEED } from '../game/balance.js';
 import { buildEnvironment } from './environment.js';
 import { nextQuality, TV_QUALITY } from './quality.js';
+import { blobLook } from './blobShadow.js';
 import { stepGait, clipTimeScale, WALK_ABOVE, WALK_STRIDE, RUN_STRIDE } from './gait.js';
 import { jumpPose, createPose, POSE_BONES } from './jumpPose.js';
 import { THEMES } from './themes.js';
@@ -28,7 +29,7 @@ export function createScene(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !IS_TV }); // MSAA is costly on TV GPUs
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.5; // the physical sky is bright; this keeps golden hour from blowing out
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = !IS_TV; // a TV never has shadows (see quality.js): no shadow code in any shader, no switching
   renderer.shadowMap.type = THREE.PCFShadowMap; // r186: this is the soft filter (PCFSoftShadowMap was removed)
   const scene = new THREE.Scene();
   let gapsApplied = null; // the session builds a new gaps array per level, so a reference check says when to rebuild
@@ -53,14 +54,18 @@ export function createScene(canvas) {
   scene.add(fill);
   const sun = new THREE.DirectionalLight();
   const sunOffset = new THREE.Vector3(); // sun.position relative to the walker: the theme's sun direction * 100
-  sun.castShadow = true;
+  sun.castShadow = !IS_TV;
   sun.shadow.mapSize.set(1024, 1024);
   Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 60, far: 140 });
   sun.shadow.bias = -0.0005;
   sun.shadow.normalBias = 0.02;
   scene.add(sun, sun.target);
   applyLights(theme);
-  // Shadows are switched through sun.castShadow (one shader rebuild). Clearing renderer.shadowMap.enabled
+  // On a TV the soldier's shadow is a blob on the planks (one draw call) instead of a shadow map.
+  const blob = IS_TV ? buildBlob() : null;
+  if (blob) scene.add(blob);
+  const blobState = { opacity: 0, scale: 1 }; // reused every frame
+  // Desktop: shadows are switched through sun.castShadow (one shader rebuild). Clearing renderer.shadowMap.enabled
   // instead would leave the sun's shadow map bound and stamped on the planks, saving nothing.
   const adaptQuality = createAdaptiveQuality(renderer, (on) => (sun.castShadow = on));
 
@@ -230,6 +235,16 @@ export function createScene(canvas) {
           camera.lookAt(0, 1.1 + CAMERA_Y_FOLLOW * lift, z - 8);
         }
       }
+      if (blob) {
+        // Follows his feet; fades as he jumps up and as he falls (no shadow for something that has left the bridge).
+        const on = walker.visible && blobLook(lift, falling ? s.phaseTime : 0, blobState);
+        blob.visible = on;
+        if (on) {
+          blob.position.z = z;
+          blob.scale.setScalar(blobState.scale);
+          blob.material.opacity = blobState.opacity;
+        }
+      }
       streaks.update(dt, windOpacity, windSpeed, windDir, camera); // after the camera's fov is settled for this view
       adaptQuality();
       renderer.render(scene, camera);
@@ -254,7 +269,7 @@ export function createScene(canvas) {
 // and win them back when there is headroom. The rules live in quality.js.
 function createAdaptiveQuality(renderer, setShadows) {
   const options = IS_TV ? TV_QUALITY : { maxScale: Math.min(window.devicePixelRatio, 1.5) };
-  let state = { scale: Math.min(IS_TV ? TV_QUALITY.startScale : 1, options.maxScale), shadows: true, goodStreak: 0 };
+  let state = { scale: Math.min(IS_TV ? TV_QUALITY.startScale : 1, options.maxScale), shadows: !IS_TV, goodStreak: 0 };
   let frames = 0;
   // Ignore the first seconds: loading the model, textures and sounds and compiling shaders stalls a TV
   // to ~11 fps for about 8 s, which would otherwise knock it straight down to the floor with shadows off.
@@ -277,6 +292,38 @@ function createAdaptiveQuality(renderer, setShadows) {
   }
   adapt.describe = () => `scale=${state.scale.toFixed(1)} shadows=${state.shadows}`;
   return adapt;
+}
+
+// A soft dark disc (a radial gradient on a canvas) lying just above the planks, the TV's stand-in for his shadow.
+// Transparent and depthWrite off, so it blends over the planks; MeshBasic, so no lights are involved at all.
+function buildBlob() {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const g2 = canvas.getContext('2d');
+  const grad = g2.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, 'rgba(0,0,0,1)');
+  grad.addColorStop(0.5, 'rgba(0,0,0,0.75)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g2.fillStyle = grad;
+  g2.fillRect(0, 0, size, size);
+  const map = new THREE.CanvasTexture(canvas);
+  const material = new THREE.MeshBasicMaterial({
+    map,
+    transparent: true,
+    depthWrite: false,
+    opacity: 0,
+    polygonOffset: true, // the planks are slightly uneven; this keeps the disc from z-fighting them
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), material);
+  mesh.rotation.x = -Math.PI / 2; // lies flat, facing up
+  mesh.position.y = 0.035; // the plank tops are at y = 0 (a little uneven)
+  mesh.renderOrder = 1; // after the opaque planks
+  mesh.visible = false;
+  mesh.name = 'blob-shadow';
+  return mesh;
 }
 
 // Simple figure with arms out for balance. The group's origin is at the feet so it pivots there.

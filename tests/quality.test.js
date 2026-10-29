@@ -78,13 +78,46 @@ describe('nextQuality', () => {
     });
 
     it('can win resolution back at 46-50 fps, the most a 50 Hz TV ever shows', () => {
-      const once = tv(48);
+      const once = tv(48, { shadows: false });
       expect(once.goodStreak).toBe(1);
       expect(nextQuality(48, once, TV_QUALITY).scale).toBe(0.85);
     });
 
     it('holds steady in the 38-46 fps band', () => {
-      expect(tv(40)).toEqual({ scale: 0.75, shadows: true, goodStreak: 0 });
+      expect(tv(40)).toEqual({ scale: 0.75, shadows: false, goodStreak: 0 });
+    });
+
+    it('has shadows permanently off, so no reading can toggle them (that rebuilds shaders)', () => {
+      expect(TV_QUALITY.shadows).toBe(false);
+      // every fps from a stall to a 50 Hz panel's best, from every starting scale, with the flag on or off
+      for (const shadows of [false, true]) {
+        for (const scale of [0.6, 0.7, 0.8, 1]) {
+          for (let fps = 5; fps <= 60; fps += 1) {
+            for (const goodStreak of [0, 1, 2]) {
+              const next = nextQuality(fps, { scale, shadows, goodStreak }, TV_QUALITY);
+              expect(next.shadows).toBe(false);
+            }
+          }
+        }
+      }
+    });
+
+    it('a long run of readings never turns shadows on, and still adapts the scale', () => {
+      let s = { scale: 0.7, shadows: false, goodStreak: 0 };
+      const seen = new Set();
+      for (let i = 0; i < 400; i++) {
+        s = nextQuality([20, 36, 40, 44, 48, 50][i % 6], s, TV_QUALITY);
+        expect(s.shadows).toBe(false);
+        seen.add(s.scale);
+      }
+      expect(seen.size).toBeGreaterThan(1);
+    });
+
+    it('goes straight to resolution at 48 fps, with no shadow step first', () => {
+      let s = { scale: 0.6, shadows: false, goodStreak: 0 };
+      s = nextQuality(48, s, TV_QUALITY);
+      s = nextQuality(48, s, TV_QUALITY);
+      expect(s).toEqual({ scale: 0.7, shadows: false, goodStreak: 0 });
     });
 
     it('stops at full app resolution (1.0)', () => {
