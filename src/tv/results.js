@@ -86,6 +86,20 @@ export function recordRun(storage, result) {
   return { best: records.run, isNew };
 }
 
+// Which record(s) this clear beat, as the panel's badge: 'NEW BEST SCORE!', 'NEW BEST TIME!' or
+// 'NEW BEST SCORE & TIME!', and '' when neither. The best score and the best time can come from different runs.
+export function newBestLabel(newScore, newTime) {
+  if (newScore && newTime) return 'NEW BEST SCORE & TIME!';
+  if (newScore) return 'NEW BEST SCORE!';
+  if (newTime) return 'NEW BEST TIME!';
+  return '';
+}
+
+// "Best score 1,500 · Best time 0:29" (just the score when there is no time record).
+export function bestLine(score, time) {
+  return `Best score ${score}${time ? ` · Best time ${time}` : ''}`;
+}
+
 // The numbers and labels for the results panel, all as strings, so hud.js only has to place them.
 // `recorded` is what recordLevel / recordRun returned for this result.
 export function resultView(result, recorded) {
@@ -113,9 +127,11 @@ export function resultView(result, recorded) {
     runScore: formatScore(result.runScore),
     bestScore: formatScore(best.score),
     bestTime: best.time == null ? '' : formatClock(best.time),
+    bestLine: bestLine(formatScore(best.score), best.time == null ? '' : formatClock(best.time)),
     newScore: !!(recorded && recorded.newScore),
     newTime: !!(recorded && recorded.newTime),
     isNew: !!(recorded && (recorded.newScore || recorded.newTime)),
+    newLabel: newBestLabel(!!(recorded && recorded.newScore), !!(recorded && recorded.newTime)),
     next: `Press START for Level ${num(result.level, 1) + 1}`,
   };
 }

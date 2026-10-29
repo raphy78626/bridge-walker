@@ -241,7 +241,8 @@ describe('wind indicator, timer, score and results panel', () => {
     const hud = createHud(r.doc);
     hud.showResults({
       kind: 'level', title: 'LEVEL 2 COMPLETE', stars: 2, time: '0:29', par: 'PAR 0:32', falls: '1', score: '1,240',
-      runScore: '3,390', bestScore: '1,500', bestTime: '0:27', isNew: true, next: 'Press START for Level 3',
+      runScore: '3,390', bestScore: '1,500', bestTime: '0:27', bestLine: 'Best score 1,500 \u00b7 Best time 0:27', isNew: true,
+      newLabel: 'NEW BEST TIME!', next: 'Press START for Level 3',
     });
     const e = r.doc.els;
     expect(e.results).toMatchObject({ hidden: false, className: 'results level' });
@@ -252,7 +253,8 @@ describe('wind indicator, timer, score and results panel', () => {
     expect(e['res-score'].textContent).toBe('1,240');
     expect(e['res-total'].textContent).toBe('3,390');
     expect(e['res-new'].hidden).toBe(false);
-    expect(e['res-best'].textContent).toContain('1,500');
+    expect(e['res-new'].textContent).toBe('NEW BEST TIME!');
+    expect(e['res-best'].textContent).toBe('Best score 1,500 \u00b7 Best time 0:27');
     expect(e['res-next'].textContent).toBe('Press START for Level 3');
     hud.hideResults();
     expect(e.results.hidden).toBe(true);

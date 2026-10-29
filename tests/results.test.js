@@ -5,7 +5,9 @@ import {
   formatPar,
   formatScore,
   formatStars,
+  bestLine,
   loadRecords,
+  newBestLabel,
   recordLevel,
   recordRun,
   resultLine,
@@ -164,16 +166,36 @@ describe('result view', () => {
       runScore: '3,400',
       bestScore: '1,500',
       bestTime: '0:38',
+      bestLine: 'Best score 1,500 \u00b7 Best time 0:38',
       isNew: false,
+      newLabel: '',
       next: 'Press START for Level 3',
     });
   });
 
-  it('shows NEW BEST when either record was beaten', () => {
-    const v = resultView(level(), { best: { score: 1240, time: 41 }, newScore: true, newTime: false });
-    expect(v.isNew).toBe(true);
-    expect(v.newScore).toBe(true);
-    expect(resultView(level(), { best: { score: 1, time: 1 }, newScore: false, newTime: true }).isNew).toBe(true);
+  it('says which record was beaten: score, time or both', () => {
+    const view = (newScore, newTime) => resultView(level(), { best: { score: 1240, time: 41 }, newScore, newTime });
+    expect(view(true, false)).toMatchObject({ isNew: true, newScore: true, newTime: false, newLabel: 'NEW BEST SCORE!' });
+    expect(view(false, true)).toMatchObject({ isNew: true, newScore: false, newTime: true, newLabel: 'NEW BEST TIME!' });
+    expect(view(true, true)).toMatchObject({ isNew: true, newLabel: 'NEW BEST SCORE & TIME!' });
+    expect(view(false, false)).toMatchObject({ isNew: false, newLabel: '' });
+    expect(resultView(level(), null).newLabel).toBe('');
+  });
+
+  it('labels the best line, even when the best score and best time are from different runs', () => {
+    const st = memory();
+    recordLevel(st, level({ score: 1500, time: 45 })); // best score
+    const r = recordLevel(st, level({ score: 900, time: 29 })); // best time, from another run
+    const v = resultView(level({ score: 900, time: 29 }), r);
+    expect(v.newLabel).toBe('NEW BEST TIME!');
+    expect(v.bestLine).toBe('Best score 1,500 \u00b7 Best time 0:29');
+  });
+
+  it('builds the badge and the best line from their parts', () => {
+    expect(newBestLabel(true, true)).toBe('NEW BEST SCORE & TIME!');
+    expect(newBestLabel(false, false)).toBe('');
+    expect(bestLine('1,500', '0:29')).toBe('Best score 1,500 \u00b7 Best time 0:29');
+    expect(bestLine('1,500', '')).toBe('Best score 1,500'); // no time record
   });
 
   it('lays out a run summary', () => {

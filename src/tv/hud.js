@@ -131,8 +131,9 @@ export function createHud(doc = document, timers = globalThis) {
         $('res-falls').textContent = v.falls;
         $('res-score').textContent = v.score;
         $('res-total').textContent = v.runScore;
+        $('res-new').textContent = v.newLabel; // which record was beaten: score, time or both
         $('res-new').hidden = !v.isNew;
-        $('res-best').textContent = `BEST  ${v.bestScore} pts${v.bestTime ? `  ·  ${v.bestTime}` : ''}`;
+        $('res-best').textContent = v.bestLine;
       } else {
         $('run-level').textContent = v.level;
         $('run-score').textContent = v.runScore;
