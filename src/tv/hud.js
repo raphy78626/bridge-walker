@@ -242,6 +242,7 @@ export function createHud(doc = document, timers = globalThis) {
     },
     // The race's pause panel and its 3-2-1-GO (the lobby and the results have their own panels).
     renderRaceMessage(match) {
+      setText('message', ''); // the race has no centre line: clear what solo left there (its lobby's "Press START")
       syncPause(pausedOf(match));
       syncCountdown(countdownText(match));
     },

@@ -197,6 +197,15 @@ describe('wind indicator, timer, score and results panel', () => {
     expect(r.only('wind')).toEqual([['wind', 'hidden', true]]);
   });
 
+  it('the race clears the centre line solo left behind (its lobby "Press START" must not sit under the 3-2-1-GO)', () => {
+    const r = recorder();
+    const hud = createHud(r.doc);
+    hud.render(state({ phase: 'lobby' }));
+    expect(r.doc.els.message.textContent).toBe('Press START on your phone');
+    hud.renderRaceMessage({ mode: 'race', phase: 'lobby', paused: false });
+    expect(r.doc.els.message.textContent).toBe('');
+  });
+
   it('shows the par, and the timer is gold only while under it', () => {
     const r = recorder();
     const hud = createHud(r.doc);
