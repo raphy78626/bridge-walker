@@ -4,8 +4,10 @@
 A parent & kid project for LG webOS TVs, vibe-coded together with [Claude Code](https://claude.com/claude-code).
 
 Hold your phone like a steering wheel and tilt to keep him upright. Hold **WALK** or **RUN**, tap **JUMP** over
-the gaps where planks are missing, and don't fall into the canyon. Every level has a new time of day, its own
-soundscape, more gaps and stronger wind.
+the gaps where planks are missing, and don't fall into the canyon. Watch for the **WIND** warning: every gust is
+announced a moment before it hits, so you can lean into it. Beat the par time without falling for three stars.
+Every level has a new time of day, its own soundscape, and gets a little harder: more gaps, stronger and more
+frequent gusts.
 
 ![Golden afternoon](docs/screenshots/golden-afternoon.jpg)
 
@@ -47,6 +49,17 @@ npm run tv
 | Hold **WALK** / **RUN** | move forward (running is twice as fast but wobblier) |
 | Tap **JUMP** | leap over gaps; a red cloth on the ropes and **GAP AHEAD** warn you |
 | **🎥 VIEW** | switch camera: chase, first person (the horizon tilts as you lean), cinematic |
+| **⏸ Pause** | freeze the game (and the sound); tap **▶ Resume** to carry on |
+| **🔊 Sound** | music and sound-effect volume, remembered on your phone |
+
+### Wind and scoring
+
+- About 1.8 s before a gust, a **WIND** arrow appears on the TV and your phone, streaks blow across the canyon, the
+  ropes sway and you hear it coming from that side. Lean against it.
+- Each level has a **par time** (shown under the timer, which turns gold while you're under it).
+  ★★★ = no falls and under par (you'll need to run), ★★ = close, ★ = you made it.
+- Points for speed and clean runs add up across the run. Your best score and time per level, and your best run,
+  are saved on the TV.
 
 ## Install the LG webOS TV app (optional)
 
@@ -81,7 +94,7 @@ to type the address that `npm run tv` printed.
 
 ```bash
 npm run dev      # live-reloading dev server (phone https://...:5173, TV http://...:5183/tv.html)
-npm test         # 255 unit tests (Vitest)
+npm test         # 400 unit tests (Vitest)
 npm run smoke    # pairs a fake TV and phone through a running server
 ```
 

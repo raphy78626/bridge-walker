@@ -2,7 +2,7 @@
 
 What's next for Bridge Walker, in order. Each step is reviewed and play-tested on a real LG TV before the next.
 
-## 1. Visible wind, harder levels, real scoring *(in progress)*
+## 1. Visible wind, harder levels, real scoring *(done)*
 - Gusts are announced about 1.8 s ahead: a WIND arrow on the TV and the phone, streaks blowing across the
   scene, swaying ropes, and a whoosh from that side.
 - Each level gets a little harder: more frequent and slightly stronger gusts, a bit more wobble, more and wider gaps.
@@ -21,13 +21,14 @@ Both phones scan the same QR code; the TV shows player colours and lets you pick
 
 (Split screen was considered and rejected: the TV's GPU would drop to about half the frame rate.)
 
-## 4. Pause and volume
+## 4. Pause and volume *(done)*
 A pause button on the phone, and a small settings sheet with music and sound-effect volume.
 
 ## 5. Polish
-- A steady 50 fps on 50 Hz TVs (today it's 40-45, which judders slightly).
+- A steady 50 fps on 50 Hz TVs (today it's 39-45: shadow hitches are gone, but the resolution still steps
+  between 60% and 70%).
 - Less repetitive rock walls: ledges, cracks, layered bands and colour variation, still baked so it stays cheap.
-- A closer, tighter cinematic camera that zooms out near gaps.
+- A closer, tighter cinematic camera *(done)*; zooming out near gaps is still to do.
 
 ## 6. Testing
 - Android phones: test on the Android emulator's simulated motion sensors, then a real phone.
