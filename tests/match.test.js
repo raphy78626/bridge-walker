@@ -741,3 +741,89 @@ describe('windmaster match', () => {
     expect(m.canChangeMode).toBe(true);
   });
 });
+
+// The TV reads tally and scores every frame (stateSync.changed, hud.renderRace / renderWindMaster), so reading them must not
+// allocate: the same object comes back until the numbers change, and nobody can mutate it from outside.
+describe('tally and scores are stable objects', () => {
+  const finishRound = (m, player = 1) => {
+    const s = m.sessions[m.mode === 'race' ? player : 1];
+    s.walker = { ...s.walker, z: 59.99 };
+    s.gaps = [];
+    m.input(player, { t: 'walk', on: true });
+    m.update(DT);
+  };
+
+  it('race: the same objects every read, replaced only when a round is won, and frozen', () => {
+    const m = createMatch({ mode: 'race', seed: 7, winsToWin: 3 });
+    const [t0, s0] = [m.tally, m.scores];
+    expect(m.tally).toBe(t0);
+    expect(m.scores).toBe(s0);
+    m.start();
+    for (let i = 0; i < 30; i++) m.update(DT);
+    expect(m.tally).toBe(t0);
+    expect(m.scores).toBe(s0);
+    expect(Object.isFrozen(m.tally) && Object.isFrozen(m.scores)).toBe(true);
+    expect(() => { 'use strict'; m.tally[1] = 9; }).toThrow();
+    finishRound(m, 2);
+    expect(m.tally).not.toBe(t0);
+    expect(m.tally).toEqual({ 1: 0, 2: 1 });
+    expect(m.scores[2]).toBe(m.sessions[2].result.score);
+    const [t1, s1] = [m.tally, m.scores];
+    for (let i = 0; i < 30; i++) m.update(DT);
+    expect(m.tally).toBe(t1);
+    expect(m.scores).toBe(s1);
+    expect(t0).toEqual({ 1: 0, 2: 0 }); // the old snapshot is untouched
+  });
+
+  it('race: a new match after matchOver starts from fresh zero objects', () => {
+    const m = createMatch({ mode: 'race', seed: 7, winsToWin: 1 });
+    m.start();
+    finishRound(m, 1);
+    expect(m.phase).toBe('matchOver');
+    expect(m.tally).toEqual({ 1: 1, 2: 0 });
+    m.start();
+    expect(m.tally).toEqual({ 1: 0, 2: 0 });
+    expect(m.scores).toEqual({ 1: 0, 2: 0 });
+    expect(m.result).toBe(null);
+  });
+
+  it('race: the result keeps its own snapshot of the tally and scores', () => {
+    const m = createMatch({ mode: 'race', seed: 7, winsToWin: 3 });
+    m.start();
+    finishRound(m, 1);
+    expect(m.result.tally).toEqual({ 1: 1, 2: 0 });
+    m.start();
+    finishRound(m, 2);
+    expect(m.tally).toEqual({ 1: 1, 2: 1 });
+    expect(m.result.tally).toEqual({ 1: 1, 2: 1 });
+  });
+
+  it('windmaster: the same scores object until a round ends', () => {
+    const m = createMatch({ mode: 'windmaster', seed: 9, rounds: 3 });
+    const s0 = m.scores;
+    m.start();
+    for (let i = 0; i < 30; i++) m.update(DT);
+    expect(m.scores).toBe(s0);
+    expect(Object.isFrozen(m.scores)).toBe(true);
+    finishRound(m, 1);
+    expect(m.scores).not.toBe(s0);
+    expect(m.scores[1]).toBe(m.result.walkerResult.score);
+    expect(m.scores[2]).toBe(0);
+    const s1 = m.scores;
+    for (let i = 0; i < 30; i++) m.update(DT);
+    expect(m.scores).toBe(s1);
+    expect(s0).toEqual({ 1: 0, 2: 0 });
+  });
+
+  it('solo: scores is the run score, the same object until it changes', () => {
+    const m = createMatch({ mode: 'solo', seed: 1 });
+    const s0 = m.scores;
+    expect(s0).toEqual({ 1: 0, 2: 0 });
+    expect(m.scores).toBe(s0);
+    m.start();
+    finishRound(m, 1);
+    expect(m.scores).not.toBe(s0);
+    expect(m.scores).toEqual({ 1: m.sessions[1].runScore, 2: 0 });
+    expect(m.scores).toBe(m.scores);
+  });
+});

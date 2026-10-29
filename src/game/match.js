@@ -23,7 +23,10 @@ export const WINDMASTER_ROUNDS = 4; // rounds in a windmaster match: each player
 export const WIND_MASTER_MIN_FORCE = 0.7;
 export const windMasterForce = (levelMaxWind) => Math.max(levelMaxWind, WIND_MASTER_MIN_FORCE);
 
-const copy2 = (o) => ({ 1: o[1], 2: o[2] });
+// tally and scores are read every frame by the TV (stateSync.changed, the HUD), so they are immutable snapshots that are
+// replaced when a number changes, never copied on every read.
+const pair = (a, b) => Object.freeze({ 1: a, 2: b });
+const ZERO = pair(0, 0);
 
 // Applies a decoded phone message (tilt, walk, run, jump) to one session.
 function applyInput(session, msg) {
@@ -58,6 +61,7 @@ export function createMatch({ mode = 'solo', seed = 1, winsToWin = RACE_ROUNDS_T
 
 function createSolo(seed) {
   const session = createSession({ seed });
+  let scores = ZERO;
   return {
     mode: 'solo',
     players: [1],
@@ -66,7 +70,10 @@ function createSolo(seed) {
     get round() { return session.level; },
     get level() { return session.level; },
     get result() { return session.result; },
-    get scores() { return { 1: session.runScore, 2: 0 }; },
+    get scores() {
+      if (scores[1] !== session.runScore) scores = pair(session.runScore, 0);
+      return scores;
+    },
     get paused() { return session.paused; },
     get gustReady() { return false; },
     get canChangeMode() { return session.phase === 'lobby' || session.phase === 'won' || session.phase === 'gameover'; },
@@ -88,7 +95,7 @@ function createRace(seed, winsToWin) {
   const both = [sessions[1], sessions[2]];
   // elapsed is the round's own clock, from start() of the round: the one race times and tie-breaks use. A lane's session.time
   // leaves out the ledge wait (and a fall's animation), so two lanes' times are not comparable.
-  const m = { phase: 'lobby', round: 1, result: null, tally: { 1: 0, 2: 0 }, scores: { 1: 0, 2: 0 }, elapsed: 0 };
+  const m = { phase: 'lobby', round: 1, result: null, tally: ZERO, scores: ZERO, elapsed: 0 };
 
   function finish() {
     const done = [1, 2].filter((p) => sessions[p].phase === 'won');
@@ -97,8 +104,9 @@ function createRace(seed, winsToWin) {
     // whoever got furthest past, then to player 1. (Not to the lane clock, which a ledge wait skews.)
     const winner = done.reduce((a, b) => (sessions[a].walker.z >= sessions[b].walker.z ? a : b));
     for (const s of both) if (s.phase !== 'won') s.halt();
-    m.tally[winner] += 1;
-    m.scores[winner] += sessions[winner].result.score;
+    m.tally = pair(m.tally[1] + (winner === 1 ? 1 : 0), m.tally[2] + (winner === 2 ? 1 : 0));
+    const won = sessions[winner].result.score;
+    m.scores = pair(m.scores[1] + (winner === 1 ? won : 0), m.scores[2] + (winner === 2 ? won : 0));
     const matchWinner = m.tally[winner] >= winsToWin ? winner : 0;
     m.result = {
       kind: 'race',
@@ -110,8 +118,8 @@ function createRace(seed, winsToWin) {
       finished: { 1: sessions[1].phase === 'won', 2: sessions[2].phase === 'won' },
       stars: sessions[winner].result.stars,
       score: sessions[winner].result.score,
-      tally: copy2(m.tally),
-      scores: copy2(m.scores),
+      tally: m.tally,
+      scores: m.scores,
       matchWinner,
     };
     m.phase = matchWinner ? 'matchOver' : 'roundOver';
@@ -125,8 +133,8 @@ function createRace(seed, winsToWin) {
     get round() { return m.round; },
     get level() { return m.round; },
     get result() { return m.result; },
-    get tally() { return copy2(m.tally); },
-    get scores() { return copy2(m.scores); },
+    get tally() { return m.tally; },
+    get scores() { return m.scores; },
     get elapsed() { return m.elapsed; }, // seconds since this round's start(), not counting a pause
     get paused() { return sessions[1].paused; },
     gustReady: false,
@@ -138,7 +146,7 @@ function createRace(seed, winsToWin) {
 
     start() {
       if (m.phase === 'playing') return;
-      if (m.phase === 'matchOver') Object.assign(m, { round: 1, tally: { 1: 0, 2: 0 }, scores: { 1: 0, 2: 0 } });
+      if (m.phase === 'matchOver') Object.assign(m, { round: 1, tally: ZERO, scores: ZERO });
       else if (m.phase === 'roundOver') m.round += 1;
       m.result = null;
       m.elapsed = 0;
@@ -169,7 +177,7 @@ function createWindMaster(seed, rounds) {
     ledgeClockAfter: LEDGE_CLOCK_START_S,
     windSource: ({ maxForce }) => (wind = createControlledWind({ maxForce: windMasterForce(maxForce) })),
   });
-  const m = { phase: 'lobby', round: 1, result: null, scores: { 1: 0, 2: 0 } };
+  const m = { phase: 'lobby', round: 1, result: null, scores: ZERO };
   let walker = 1; // who walks this round (or, between rounds, the next one)
   let level = 1;
   let fallsCaused = 0;
@@ -184,8 +192,7 @@ function createWindMaster(seed, rounds) {
     const walkerPoints = won ? session.result.score : 0;
     const windPoints = fallsCaused * WIND_MASTER_FALL_POINTS;
     const windMaster = other(walker);
-    m.scores[walker] += walkerPoints;
-    m.scores[windMaster] += windPoints;
+    m.scores = pair(m.scores[1] + (walker === 1 ? walkerPoints : windPoints), m.scores[2] + (walker === 2 ? walkerPoints : windPoints));
     const last = m.round >= rounds;
     const [a, b] = [m.scores[1], m.scores[2]];
     m.result = {
@@ -198,7 +205,7 @@ function createWindMaster(seed, rounds) {
       walkerResult: session.result,
       fallsCaused,
       roundScores: { [walker]: walkerPoints, [windMaster]: windPoints },
-      scores: copy2(m.scores),
+      scores: m.scores,
       matchWinner: last && a !== b ? (a > b ? 1 : 2) : 0, // 0 until the match is over, and for a draw
     };
     level = won ? session.level + 1 : session.level; // a failed level is the next player's to try
@@ -214,7 +221,7 @@ function createWindMaster(seed, rounds) {
     get round() { return m.round; },
     get level() { return session.level; },
     get result() { return m.result; },
-    get scores() { return copy2(m.scores); },
+    get scores() { return m.scores; },
     get paused() { return session.paused; },
     get gustReady() { return gustable() && wind.ready(session.time); },
     // Seconds until the Wind Master may send another gust: 0 when ready or when no round is running, Infinity while the
@@ -236,7 +243,7 @@ function createWindMaster(seed, rounds) {
     start() {
       if (m.phase === 'playing') return;
       if (m.phase === 'matchOver') {
-        Object.assign(m, { round: 1, scores: { 1: 0, 2: 0 } });
+        Object.assign(m, { round: 1, scores: ZERO });
         walker = 1;
         level = 1;
       } else if (m.phase === 'roundOver') {
