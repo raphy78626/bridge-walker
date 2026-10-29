@@ -57,10 +57,10 @@ export function buildStateMessage(session) {
 
 // One per phone. changed(session) is the single-player check; with the match it also
 // watches what only a two-player match changes: the mode and role, the match phase (a round is over while a session is
-// still 'playing'), the round, the tally, the scores, this racer's falls and leash wait, the Wind Master's gust readiness and the result.
+// still 'playing'), the round, the tally, the scores, this racer's falls, leash wait and countdown, the Wind Master's gust readiness and the result.
 export function createStateSync() {
   let phase, lives, level, paused, wind, windDir, windLevel, stars, score, runScore, keepMoving;
-  let mode, matchPhase, role, gustReady, round, tally1, tally2, scores1, scores2, falls, waiting, matchResult, watching;
+  let mode, matchPhase, role, gustReady, round, tally1, tally2, scores1, scores2, falls, waiting, countdown, matchResult, watching;
   let seen = false;
   return {
     // True when anything the phone shows differs from the last message built. Updates what it compares against.
@@ -79,6 +79,7 @@ export function createStateSync() {
       const nextS2 = scores ? scores[2] : undefined;
       const nextFalls = match && match.mode === 'race' ? session.levelFalls : undefined;
       const nextWaiting = match && match.mode === 'race' ? session.waiting === true && !session.halted : undefined;
+      const nextCountdown = match && match.mode === 'race' && match.phase === 'playing' ? Math.ceil(match.countdown ?? 0) : undefined;
       const nextResult = match && match.mode !== 'solo' ? match.result : undefined;
       const f = forecastOf(session);
       const r = resultFields(session);
@@ -111,6 +112,7 @@ export function createStateSync() {
         scores2 === nextS2 &&
         falls === nextFalls &&
         waiting === nextWaiting &&
+        countdown === nextCountdown &&
         matchResult === nextResult &&
         watching === spectator;
       phase = session.phase;
@@ -135,6 +137,7 @@ export function createStateSync() {
       scores2 = nextS2;
       falls = nextFalls;
       waiting = nextWaiting;
+      countdown = nextCountdown;
       matchResult = nextResult;
       watching = spectator;
       seen = true;

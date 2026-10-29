@@ -96,7 +96,7 @@ describe('the state message stays small', () => {
   });
 
   it('a real race round trips: the phone still reads the round result', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 2, winsToWin: 1 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 2, winsToWin: 1 });
     m.start();
     const s = m.sessions[1];
     s.walker = { ...s.walker, z: 59.99 };

@@ -21,6 +21,7 @@ const PHONE_ID = phoneId(sessionStore());
 
 const gusts = createGustTrigger();
 const keepMovingBuzz = createKeepMovingBuzz();
+let lastCountdown = 0; // the race's 3-2-1 as last shown: the phone buzzes on GO
 const $ = (id) => document.getElementById(id);
 const room = (new URLSearchParams(location.search).get('room') ?? '').toUpperCase();
 const tilt = createTiltReader();
@@ -136,6 +137,9 @@ function onMessage(msg) {
     $('btn-pause').hidden = msg.phase !== 'playing' || view.spectator;
     $('btn-pause').textContent = msg.paused ? '▶ Resume' : '⏸ Pause';
     if (msg.phase === 'falling') navigator.vibrate?.(300);
+    const countdown = msg.countdown > 0 ? msg.countdown : 0;
+    if (lastCountdown > 0 && countdown === 0 && msg.phase === 'playing') navigator.vibrate?.(150); // GO!
+    lastCountdown = countdown;
   }
 }
 

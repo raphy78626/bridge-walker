@@ -50,6 +50,7 @@ export function matchStateFor(match, player) {
     msg.tally = match.tally;
     msg.falls = session.levelFalls;
     msg.waiting = session.phase === 'playing' && !session.halted && session.waiting === true; // held at the race leash
+    msg.countdown = match.phase === 'playing' ? Math.ceil(match.countdown ?? 0) : 0; // 3, 2, 1 before GO; 0 once racing
   } else {
     msg.lives = session.lives;
   }

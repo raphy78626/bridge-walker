@@ -25,6 +25,14 @@ export const pname = (p) => PLAYER_NAMES[p];
 // A racer held at the leash (game/match.js RACE_LEASH): his panel and his phone say who he is waiting for.
 export const waitingOf = (s) => !!s && s.phase === 'playing' && !s.paused && !s.halted && s.waiting === true;
 
+// The race's 3-2-1 in the middle of the screen, then GO! for a moment. '' the rest of the time (and in the other modes).
+export const GO_SHOW_S = 0.8;
+export function countdownText(match) {
+  if (match.mode !== 'race' || match.phase !== 'playing') return '';
+  if (match.countdown > 0) return String(Math.ceil(match.countdown));
+  return match.sinceGo >= 0 && match.sinceGo < GO_SHOW_S ? 'GO!' : '';
+}
+
 // "Round 2 · P1 1 – 0 P2" (race: the round wins).
 export function raceRoundLine(round, tally) {
   return `Round ${round} · P1 ${tally[1]} – ${tally[2]} P2`;

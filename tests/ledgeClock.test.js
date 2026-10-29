@@ -39,14 +39,14 @@ describe('the ledge clock', () => {
 
   it('race and windmaster start the lane clock after 4 s on the ledge; stepping on earlier starts it at once', () => {
     for (const mode of ['race', 'windmaster']) {
-      const m = createMatch({ mode, seed: 3 });
+      const m = createMatch({ mode, seed: 3, countdown: 0 });
       m.start();
       const s = m.sessions[1];
       tick(m, 3.9);
       expect(s.time).toBe(0);
       tick(m, 0.6);
       expect(s.time).toBeGreaterThan(0);
-      const n = createMatch({ mode, seed: 3 });
+      const n = createMatch({ mode, seed: 3, countdown: 0 });
       n.start();
       onBridge(n);
       tick(n, 0.5);
@@ -55,7 +55,7 @@ describe('the ledge clock', () => {
   });
 
   it('the ledge wait restarts with each round, and a paused wait does not count', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 3 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 3 });
     m.start();
     m.togglePause();
     tick(m, 10);

@@ -8,7 +8,7 @@ import { stateMessageFor } from '../src/tv/stateSync.js';
 
 const DT = 1 / 60;
 const steady = (w) => Math.max(-1, Math.min(1, -2 * w.lean - 0.5 * w.leanVel));
-const race = () => createMatch({ mode: 'race', seed: 7 });
+const race = () => createMatch({ mode: 'race', seed: 7, countdown: 0 }); // the 3-2-1 has its own tests
 // Both lanes with no gaps and no wind, so only the leash moves anything.
 function calmRace() {
   const m = race();

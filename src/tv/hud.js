@@ -3,7 +3,7 @@ import { FALL_ANGLE } from '../game/balance.js';
 import { WIND_OFF, windIndicator } from './windFx.js';
 import { formatPar, formatScore, underPar } from './results.js';
 import { keepMovingOf } from './keepMoving.js';
-import { GUST_RING_S, raceHudView, windmasterHudView, waitingOf } from './matchHud.js';
+import { GUST_RING_S, raceHudView, windmasterHudView, waitingOf, countdownText } from './matchHud.js';
 
 export function formatTime(sec) {
   const m = Math.floor(sec / 60);
@@ -101,6 +101,19 @@ export function createHud(doc = document, timers = globalThis) {
     if (shown[id] === on) return;
     shown[id] = on;
     $(id).hidden = !on;
+  }
+  // Each new number pops in: the animation restarts when the text changes.
+  let shownCountdown = '';
+  function syncCountdown(text) {
+    if (text === shownCountdown) return;
+    shownCountdown = text;
+    const el = $('countdown');
+    el.textContent = text;
+    el.hidden = !text;
+    el.classList.toggle('go', text === 'GO!');
+    el.classList.remove('pop');
+    void el.offsetWidth; // restart the CSS animation
+    if (text) el.classList.add('pop');
   }
   function syncPause(on) {
     syncKeepMoving('pause', on);
@@ -227,9 +240,10 @@ export function createHud(doc = document, timers = globalThis) {
       }
       setText('race-round', v.roundLine);
     },
-    // The race's pause panel (the lobby and the results have their own panels).
+    // The race's pause panel and its 3-2-1-GO (the lobby and the results have their own panels).
     renderRaceMessage(match) {
       syncPause(pausedOf(match));
+      syncCountdown(countdownText(match));
     },
     // Wind Master: the roles strip, the round line and the gust bar. `rounds` is the match's length.
     renderWindMaster(match, rounds) {

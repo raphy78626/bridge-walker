@@ -105,7 +105,7 @@ describe('per-phone state for a match', async () => {
   const DT = 1 / 60;
 
   it('is the session message with the match fields over it, aimed at that phone only', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 4 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 4 });
     m.start();
     onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     const msg = stateMessageFor(m, 2);
@@ -139,7 +139,7 @@ describe('per-phone state for a match', async () => {
   });
 
   it('each racer gets his own session, the windmaster modes the one walker', () => {
-    const race = createMatch({ mode: 'race', leash: false, seed: 4 });
+    const race = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 4 });
     expect(sessionFor(race, 1)).toBe(race.sessions[1]);
     expect(sessionFor(race, 2)).toBe(race.sessions[2]);
     const wm = createMatch({ mode: 'windmaster', seed: 4 });
@@ -148,7 +148,7 @@ describe('per-phone state for a match', async () => {
   });
 
   it('a race phone is told about its own fall and nobody else is', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 4 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 4 });
     m.start();
     onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     const syncs = { 1: createStateSync(), 2: createStateSync() };
@@ -183,7 +183,7 @@ describe('per-phone state for a match', async () => {
   });
 
   it('a race round ending is a change even though no session phase moved but one', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 4, winsToWin: 3 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 4, winsToWin: 3 });
     m.start();
     onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     const sync = createStateSync();

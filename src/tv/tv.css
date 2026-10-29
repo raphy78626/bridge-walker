@@ -508,3 +508,24 @@ html, body {
 .pause-icon { font-size: 8vh; line-height: 1; opacity: 0.9; }
 .pause-title { margin-top: 1.4vh; font-size: 7vh; font-weight: 900; letter-spacing: 0.12em; }
 .pause-hint { margin-top: 1.2vh; font-size: 3.4vh; font-weight: 600; opacity: 0.85; }
+
+/* The race's 3-2-1-GO: one big number in the middle, popping in as it changes. */
+#countdown {
+  position: absolute;
+  top: 28vh;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 22vh;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 0.6vh 3vh rgba(0, 0, 0, 0.6);
+}
+#countdown[hidden] { display: none; }
+#countdown.go { color: #ffd24a; }
+#countdown.pop { animation: cd-pop 0.45s ease-out; }
+@keyframes cd-pop {
+  from { transform: scale(1.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}

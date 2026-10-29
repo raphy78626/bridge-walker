@@ -82,7 +82,7 @@ describe('mode switch guard: the tally and scores are not wiped between rounds',
     m.update(1 / 60);
   }
   it('race: lobby and matchOver yes; playing no; roundOver no', () => {
-    const m = createMatch({ mode: 'race', leash: false, winsToWin: 2 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, winsToWin: 2 });
     expect(modeSwitch(m, { t: 'mode', mode: 'solo' })).toBe('solo');
     m.start();
     expect(modeSwitch(m, { t: 'mode', mode: 'solo' })).toBe(null);
@@ -92,7 +92,7 @@ describe('mode switch guard: the tally and scores are not wiped between rounds',
     expect(modeSwitch(m, { t: 'mode', mode: 'solo', p: 1 })).toBe(null);
   });
   it('race: at matchOver a switch is allowed', () => {
-    const m = createMatch({ mode: 'race', leash: false, winsToWin: 1 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, winsToWin: 1 });
     m.start();
     finishRound(m);
     expect(m.phase).toBe('matchOver');

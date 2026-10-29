@@ -23,6 +23,9 @@ export const RACE_ROUNDS_TO_WIN = 3; // first to this many round wins takes the 
 // are free: once the leash would reach into them it lets go, and the finish is a real sprint.
 export const RACE_LEASH = 6;
 export const RACE_SPRINT = 10;
+// A race round opens with 3, 2, 1, GO: both walkers wait on the ledge (their phones can already hold WALK, so a good
+// start is on the GO), and the round clock starts with it.
+export const RACE_COUNTDOWN = 3;
 export const raceLeash = (otherZ) => (otherZ + RACE_LEASH >= BRIDGE_LENGTH - RACE_SPRINT ? null : otherZ + RACE_LEASH);
 export const WINDMASTER_ROUNDS = 4; // rounds in a windmaster match: each player walks twice
 // The seeded wind's peak force is tuned for a walker who must beat it (0.25 on level 1), which is far too gentle for a
@@ -59,10 +62,11 @@ function clearSessionInput(session) {
   Object.assign(session.input, { tilt: 0, walking: false, running: false, jump: false });
 }
 
-// leash (race only): false lets a racer run on alone, for tests of the other rules. The game always has it on.
-export function createMatch({ mode = 'solo', seed = 1, winsToWin = RACE_ROUNDS_TO_WIN, rounds = WINDMASTER_ROUNDS, leash = true } = {}) {
+// leash and countdown (race only): false and 0 let a racer run on alone, straight away, for tests of the other rules. The
+// game always has both.
+export function createMatch({ mode = 'solo', seed = 1, winsToWin = RACE_ROUNDS_TO_WIN, rounds = WINDMASTER_ROUNDS, leash = true, countdown = RACE_COUNTDOWN } = {}) {
   if (!MODES.includes(mode)) mode = 'solo';
-  if (mode === 'race') return createRace(seed, winsToWin, leash);
+  if (mode === 'race') return createRace(seed, winsToWin, leash, countdown);
   if (mode === 'windmaster') return createWindMaster(seed, rounds);
   return createSolo(seed);
 }
@@ -95,7 +99,7 @@ function createSolo(seed) {
   };
 }
 
-function createRace(seed, winsToWin, leash) {
+function createRace(seed, winsToWin, leash, countdown) {
   const sessions = {
     1: createSession({ seed, infiniteLives: true, ledgeClockAfter: LEDGE_CLOCK_START_S }),
     2: createSession({ seed, infiniteLives: true, ledgeClockAfter: LEDGE_CLOCK_START_S }),
@@ -103,7 +107,8 @@ function createRace(seed, winsToWin, leash) {
   const both = [sessions[1], sessions[2]];
   // elapsed is the round's own clock, from start() of the round: the one race times and tie-breaks use. A lane's session.time
   // leaves out the ledge wait (and a fall's animation), so two lanes' times are not comparable.
-  const m = { phase: 'lobby', round: 1, result: null, tally: ZERO, scores: ZERO, elapsed: 0 };
+  // countdown: seconds of 3-2-1 left (0 once it is GO). sinceGo: seconds since GO, for the TV's GO! that lingers a moment.
+  const m = { phase: 'lobby', round: 1, result: null, tally: ZERO, scores: ZERO, elapsed: 0, countdown: 0, sinceGo: Infinity };
 
   function finish() {
     const done = [1, 2].filter((p) => sessions[p].phase === 'won');
@@ -143,7 +148,9 @@ function createRace(seed, winsToWin, leash) {
     get result() { return m.result; },
     get tally() { return m.tally; },
     get scores() { return m.scores; },
-    get elapsed() { return m.elapsed; }, // seconds since this round's start(), not counting a pause
+    get elapsed() { return m.elapsed; }, // seconds since this round's GO, not counting a pause
+    get countdown() { return m.countdown; }, // seconds of 3-2-1 left; 0 once the round is under way
+    get sinceGo() { return m.sinceGo; },
     get paused() { return sessions[1].paused; },
     gustReady: false,
     get canChangeMode() { return m.phase === 'lobby' || m.phase === 'matchOver'; }, // not between rounds: a switch would wipe the tally
@@ -158,13 +165,27 @@ function createRace(seed, winsToWin, leash) {
       else if (m.phase === 'roundOver') m.round += 1;
       m.result = null;
       m.elapsed = 0;
+      m.countdown = countdown;
+      m.sinceGo = countdown > 0 ? -1 : Infinity; // a round with no countdown shows no GO!
       for (const s of both) s.start({ level: m.round, lives: START_LIVES, runScore: 0 });
       m.phase = 'playing';
     },
 
     update(dt) {
       if (m.phase !== 'playing') return;
-      if (!sessions[1].paused) m.elapsed += dt;
+      if (sessions[1].paused) {
+        for (const s of both) s.update(dt); // a paused session only drops its one-shot jump
+        return;
+      }
+      if (m.countdown > 0) {
+        // On the ledge, waiting for GO: the walkers stand, the clock does not run, and a jump pressed early is dropped.
+        m.countdown = Math.max(0, m.countdown - dt);
+        for (const s of both) s.input.jump = false;
+        if (m.countdown === 0) m.sinceGo = 0;
+        return;
+      }
+      if (m.sinceGo < Infinity) m.sinceGo += dt;
+      m.elapsed += dt;
       if (leash) {
         sessions[1].leash = raceLeash(sessions[2].walker.z);
         sessions[2].leash = raceLeash(sessions[1].walker.z);

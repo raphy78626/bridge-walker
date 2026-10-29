@@ -197,7 +197,7 @@ describe('solo match', () => {
 });
 
 describe('race match', () => {
-  const race = (opts) => createMatch({ mode: 'race', leash: false, seed: 7, ...opts });
+  const race = (opts) => createMatch({ mode: 'race', leash: false, countdown: 0, seed: 7, ...opts });
 
   it('has two sessions in the lobby, and start() begins both', () => {
     const m = race();
@@ -754,7 +754,7 @@ describe('tally and scores are stable objects', () => {
   };
 
   it('race: the same objects every read, replaced only when a round is won, and frozen', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 7, winsToWin: 3 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 7, winsToWin: 3 });
     const [t0, s0] = [m.tally, m.scores];
     expect(m.tally).toBe(t0);
     expect(m.scores).toBe(s0);
@@ -776,7 +776,7 @@ describe('tally and scores are stable objects', () => {
   });
 
   it('race: a new match after matchOver starts from fresh zero objects', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 7, winsToWin: 1 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 7, winsToWin: 1 });
     m.start();
     finishRound(m, 1);
     expect(m.phase).toBe('matchOver');
@@ -788,7 +788,7 @@ describe('tally and scores are stable objects', () => {
   });
 
   it('race: the result keeps its own snapshot of the tally and scores', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 7, winsToWin: 3 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 7, winsToWin: 3 });
     m.start();
     finishRound(m, 1);
     expect(m.result.tally).toEqual({ 1: 1, 2: 0 });

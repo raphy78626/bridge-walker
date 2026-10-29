@@ -128,6 +128,7 @@ function multiplayerText(msg, view) {
     const wind = msg.wind === 'warning' || msg.wind === 'gust' ? ` · gust ${msg.wind === 'gust' ? 'blowing' : 'coming'}` : '';
     return msg.phase === 'falling' ? `They fell!${level}` : `You are the Wind Master — blow them off!${wind}`;
   }
+  if (view.mode === 'race' && msg.phase === 'playing' && msg.countdown > 0) return `Get ready… ${msg.countdown}`;
   const falls = view.mode === 'race' && Number.isFinite(msg.falls) ? ` · Falls ${msg.falls}` : Number.isFinite(msg.lives) ? ` · ❤ ${msg.lives}` : '';
   const base = keepMovingFor(msg, view.player)
     ? KEEP_MOVING_TEXT

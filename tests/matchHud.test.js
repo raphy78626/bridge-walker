@@ -10,7 +10,7 @@ const DT = 1 / 60;
 
 describe('race HUD view-model', () => {
   it('a panel per racer in his colour, with metres, time and falls, and the round line', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 2 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 2 });
     m.start();
     for (let i = 0; i < 60 * 65.2; i++) m.update(DT); // 1:05 on the round clock
     m.sessions[1].walker = { ...m.sessions[1].walker, z: 23.7 };
@@ -24,7 +24,7 @@ describe('race HUD view-model', () => {
   });
 
   it('both panels show the one round clock, even when a lane is still on the ledge', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 2 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 2 });
     m.start();
     matchToBridge(m);
     m.sessions[2].walker = { ...m.sessions[2].walker, z: -2.5 };
@@ -37,7 +37,7 @@ describe('race HUD view-model', () => {
 
   it('shows the round number and the tally as the match goes on', () => {
     expect(raceRoundLine(2, { 1: 1, 2: 0 })).toBe('Round 2 · P1 1 – 0 P2');
-    const m = createMatch({ mode: 'race', leash: false, seed: 2 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 2 });
     m.start();
     m.sessions[1].walker = { ...m.sessions[1].walker, z: 59.99, speed: 2 };
     m.input(1, { t: 'walk', on: true });
@@ -47,7 +47,7 @@ describe('race HUD view-model', () => {
   });
 
   it('clamps the progress and the metres to the bridge', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 2 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 2 });
     m.sessions[1].walker = { ...m.sessions[1].walker, z: 75 };
     m.sessions[2].walker = { ...m.sessions[2].walker, z: -3 };
     const v = raceHudView(m);
@@ -112,7 +112,7 @@ describe('lobby and pairing panel', () => {
   });
 
   it('names the mode and says who is missing when two phones are needed', () => {
-    const race = createMatch({ mode: 'race', leash: false });
+    const race = createMatch({ mode: 'race', leash: false, countdown: 0 });
     expect(lobbyView(race, { 1: true, 2: false })).toMatchObject({ modeLabel: 'Race', warning: 'Race needs two phones: waiting for P2' });
     expect(lobbyView(race, { 1: false, 2: true }).warning).toContain('waiting for P1');
     expect(lobbyView(race, { 1: false, 2: false }).warning).toContain('both players');
@@ -121,7 +121,7 @@ describe('lobby and pairing panel', () => {
   });
 
   it('is visible in the lobby and while a phone is missing, hidden once a round runs', () => {
-    const m = createMatch({ mode: 'race', leash: false });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0 });
     expect(pairingPanelVisible(m, { ready: true, hasRoom: true })).toBe(true); // lobby
     m.start();
     expect(pairingPanelVisible(m, { ready: true, hasRoom: true })).toBe(false);
@@ -165,7 +165,7 @@ describe('Race results', () => {
   });
 
   it('works with a result a real match produced', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 2 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 2 });
     m.start();
     m.sessions[2].walker = { ...m.sessions[2].walker, z: 59.99, speed: 2 };
     m.input(2, { t: 'walk', on: true });
@@ -235,7 +235,7 @@ describe('KEEP MOVING', () => {
   });
 
   it('shows on the racer who stands still, not the other', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 2 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 2 });
     m.start();
     matchToBridge(m);
     m.input(2, { t: 'walk', on: true });
@@ -247,7 +247,7 @@ describe('KEEP MOVING', () => {
 
   it('a halted lane (the race loser, frozen where he stands) stops warning', () => {
     expect(keepMovingOf(sess({ idleTime: 3, halted: true }))).toBe(false);
-    const m = createMatch({ mode: 'race', leash: false, seed: 2 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 2 });
     m.start();
     matchToBridge(m);
     for (let i = 0; i < 60; i++) m.update(DT); // both stand still for a second: both warned
@@ -258,7 +258,7 @@ describe('KEEP MOVING', () => {
   });
 
   it('a racer still on the ledge is not warned, and his metres never go negative', () => {
-    const m = createMatch({ mode: 'race', leash: false, seed: 2 });
+    const m = createMatch({ mode: 'race', leash: false, countdown: 0, seed: 2 });
     m.start();
     for (let i = 0; i < 120; i++) m.update(DT);
     const v = raceHudView(m);
