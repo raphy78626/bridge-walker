@@ -70,18 +70,18 @@ export function strengthLevel(strength) {
 // so the HUD can compare by reference and touch the DOM only when it changes:
 //   { visible, state, from, level }  from: 'left' | 'right', the screen edge the wind blows in from.
 const OFF = Object.freeze({ visible: false, state: 'calm', from: null, level: 0 });
-const TABLE = {};
+// TABLE[state][from][level]: nested plain lookups, so the per-frame call builds no key string.
+const TABLE = { warning: { left: [], right: [] }, gust: { left: [], right: [] } };
 for (const state of ['warning', 'gust']) {
   for (const from of ['left', 'right']) {
     for (let level = 1; level <= 3; level++) {
-      TABLE[`${state}:${from}:${level}`] = Object.freeze({ visible: true, state, from, level });
+      TABLE[state][from][level] = Object.freeze({ visible: true, state, from, level });
     }
   }
 }
 export function windIndicator(f) {
   if (!f || !isLive(f) || !f.dir) return OFF;
-  const from = f.dir > 0 ? 'left' : 'right'; // wind pushing right comes in from the left
-  return TABLE[`${f.state}:${from}:${strengthLevel(f.strength)}`];
+  return TABLE[f.state][f.dir > 0 ? 'left' : 'right'][strengthLevel(f.strength)]; // wind pushing right comes in from the left
 }
 export const WIND_OFF = OFF;
 

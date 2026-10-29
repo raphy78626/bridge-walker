@@ -64,6 +64,20 @@ describe('wind indicator state', () => {
     expect(windIndicator(warn(-1, 0.5))).not.toBe(a); // side changed
   });
 
+  it('has one shared object for each of the 12 live combinations', () => {
+    const seen = new Set();
+    for (const state of ['warning', 'gust']) {
+      for (const dir of [1, -1]) {
+        for (const strength of [0.1, 0.5, 0.9]) {
+          const ind = windIndicator({ state, dir, strength, eta: 1 });
+          expect(ind.visible).toBe(true);
+          seen.add(ind);
+        }
+      }
+    }
+    expect(seen.size).toBe(12);
+  });
+
   it('does not allocate: results are frozen shared objects', () => {
     expect(Object.isFrozen(windIndicator(gust(1, 1)))).toBe(true);
   });
