@@ -35,6 +35,7 @@ const LEASH_NEAR = 0.6;
 export function createSession({ seed = 1, infiniteLives = false, windSource = null, ledgeClockAfter = null } = {}) {
   let wind = null;
   let instability = 1; // this level's lean-growth multiplier
+  let pace = 1; // this level's walk and run speed multiplier
 
   const s = {
     phase: 'lobby', // lobby | playing | falling | gameover | won
@@ -96,6 +97,7 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
       s.result = null;
       s.paused = false;
       instability = d.instability;
+      pace = d.pace;
       s.walker = { ...createWalker(), z: START_Z };
       s.idleTime = 0;
       s.waiting = false;
@@ -123,7 +125,7 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
         const sway = onFeet ? 0.15 * Math.sin(s.time * 11) : 0; // footsteps rock the walker
         const push = onBridge ? wind.force(s.time) + sway + idlePush : 0;
         const prevZ = s.walker.z;
-        s.walker = stepWalker(s.walker, { tilt, walking, running, jump, wind: push, instability, ground: !onBridge }, dt);
+        s.walker = stepWalker(s.walker, { tilt, walking, running, jump, wind: push, instability, pace, ground: !onBridge }, dt);
         // Held at the leash: no further than the limit (a jump in the air carries on, and lands where it lands), and never
         // pulled back from where he already stands. stepWalker returns a fresh walker, so it is safe to change in place.
         const limit = leashLimit();

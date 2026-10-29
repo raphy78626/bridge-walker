@@ -23,12 +23,13 @@ export function createWalker() {
 // One physics step. tilt in [-1, 1], wind in lean-acceleration units, dt in seconds.
 // instability multiplies how fast a lean grows on its own (1 = the level-1 feel; difficulty.js raises it per level).
 // running overrides walking. jump is a one-shot: it starts a jump only from the ground.
+// pace multiplies the walk and run speeds (difficulty.js raises it per level); a jump still carries at least JUMP_FORWARD.
 // ground: on the rock ledges at either end of the bridge. Solid footing: he steadies himself upright and cannot
 // fall, whatever the lean, tilt or wind; walking, running and jumping work as usual.
-export function stepWalker(w, { tilt, walking, running = false, jump = false, wind, instability: level = 1, ground = false }, dt) {
+export function stepWalker(w, { tilt, walking, running = false, jump = false, wind, instability: level = 1, ground = false, pace = 1 }, dt) {
   if (w.fallen) return w;
 
-  const inputSpeed = running ? RUN_SPEED : walking ? WALK_SPEED : 0;
+  const inputSpeed = (running ? RUN_SPEED : walking ? WALK_SPEED : 0) * pace;
   let { y, vy, airborne, speed } = w;
   if (jump && !airborne) {
     airborne = true;

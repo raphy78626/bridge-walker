@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { difficulty, MAX_WIND } from '../src/game/difficulty.js';
-import { JUMP_FORWARD, JUMP_VY, GRAVITY_ACCEL } from '../src/game/balance.js';
+import { difficulty, MAX_WIND, MAX_PACE } from '../src/game/difficulty.js';
+import { JUMP_FORWARD, JUMP_VY, GRAVITY_ACCEL, WALK_SPEED, RUN_SPEED, createWalker, stepWalker } from '../src/game/balance.js';
+import { createSession, BRIDGE_LENGTH } from '../src/game/session.js';
 
 const STAND_JUMP = JUMP_FORWARD * ((2 * JUMP_VY) / GRAVITY_ACCEL); // ~1.96 m
 
 describe('difficulty', () => {
   it('returns every knob', () => {
     expect(Object.keys(difficulty(1)).sort()).toEqual(
-      ['gapCount', 'gapLength', 'gustGapMax', 'gustGapMin', 'instability', 'maxWind', 'parTime'],
+      ['gapCount', 'gapLength', 'gustGapMax', 'gustGapMin', 'instability', 'maxWind', 'pace', 'parTime'],
     );
   });
 
@@ -19,6 +20,7 @@ describe('difficulty', () => {
       instability: 1,
       gapCount: 3,
       gapLength: 1.0,
+      pace: 1,
       parTime: 32,
     });
   });
@@ -39,7 +41,7 @@ describe('difficulty', () => {
       expect(b.instability).toBeGreaterThanOrEqual(a.instability);
       expect(b.gapCount).toBeGreaterThanOrEqual(a.gapCount);
       expect(b.gapLength).toBeGreaterThanOrEqual(a.gapLength);
-      expect(b.parTime).toBeGreaterThanOrEqual(a.parTime);
+      expect(b.pace).toBeGreaterThanOrEqual(a.pace);
     }
   });
 
@@ -52,6 +54,7 @@ describe('difficulty', () => {
       expect(d.gapLength).toBe(1.25);
       expect(d.gustGapMin).toBe(2);
       expect(d.gustGapMax).toBe(3.5);
+      expect(d.pace).toBe(MAX_PACE);
     }
     expect(MAX_WIND).toBe(1.2);
   });
@@ -73,11 +76,39 @@ describe('difficulty', () => {
     }
   });
 
-  it('par is about 1 s more for each extra gap, and walking alone cannot beat it', () => {
-    expect(difficulty(2).parTime).toBe(33);
-    expect(difficulty(5).parTime).toBe(36);
-    for (let level = 1; level <= 12; level++) {
-      expect(60 / 1.4).toBeGreaterThan(difficulty(level).parTime); // a 60 m walk takes ~43 s
+  it('par is about 1 s more for each extra gap, less as he gets faster, and walking alone cannot beat it', () => {
+    expect(difficulty(2).parTime).toBe(Math.round(33 / 1.05));
+    expect(difficulty(5).parTime).toBe(Math.round(36 / 1.2));
+    for (let level = 1; level <= 30; level++) {
+      const d = difficulty(level);
+      expect(BRIDGE_LENGTH / (WALK_SPEED * d.pace)).toBeGreaterThan(d.parTime + 3); // a walk at this level's pace
+      expect(BRIDGE_LENGTH / (RUN_SPEED * d.pace)).toBeLessThan(d.parTime); // a clean run beats it
     }
+  });
+
+  it('walking and running get 5% faster each level, up to MAX_PACE', () => {
+    expect(MAX_PACE).toBe(1.3);
+    expect(difficulty(2).pace).toBeCloseTo(1.05, 9);
+    expect(difficulty(4).pace).toBeCloseTo(1.15, 9);
+    expect(difficulty(7).pace).toBe(1.3);
+    expect(difficulty(8).pace).toBe(1.3);
+  });
+
+  it('pace scales the walk and the run in stepWalker; a standing jump still carries JUMP_FORWARD', () => {
+    const step = (opts) => stepWalker(createWalker(), { tilt: 0, wind: 0, ground: true, ...opts }, 0.1);
+    expect(step({ walking: true, pace: 1.2 }).z).toBeCloseTo(WALK_SPEED * 1.2 * 0.1, 9);
+    expect(step({ running: true, pace: 1.2 }).z).toBeCloseTo(RUN_SPEED * 1.2 * 0.1, 9);
+    expect(step({ walking: true }).z).toBeCloseTo(WALK_SPEED * 0.1, 9); // no pace: level 1
+    expect(step({ jump: true, pace: 1.3 }).speed).toBe(JUMP_FORWARD);
+  });
+
+  it('a session walks at its level\'s pace', () => {
+    const s = createSession({ seed: 3 });
+    s.start({ level: 7 });
+    s.gaps = [];
+    s.walker = { ...s.walker, z: 0 };
+    s.input.walking = true;
+    for (let i = 0; i < 60; i++) { s.input.tilt = Math.max(-1, Math.min(1, -2 * s.walker.lean - 0.5 * s.walker.leanVel)); s.update(1 / 60); }
+    expect(s.walker.z).toBeCloseTo(WALK_SPEED * difficulty(7).pace, 1);
   });
 });
