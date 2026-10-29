@@ -87,15 +87,22 @@ export const WIND_OFF = OFF;
 
 // ---------- one cue per gust ----------
 
-// Fires once per gust: true on the frame the forecast first leaves calm (the start of the warning), and not again
-// until it has been calm. A gust that arrives with no warning still fires once.
+// The whoosh sweeps through the whole warning (WIND_WARNING_S) and peaks as the gust arrives, so it only makes sense
+// when most of the warning is still ahead. After a fall during a warning the walker respawns into a gust that is
+// already part-way through it: that one stays silent rather than re-firing a full sweep.
+export const GUST_WHOOSH_MIN_ETA = 1.2;
+
+// Fires once per gust: true on the frame the forecast first leaves calm (the start of the warning) with at least
+// GUST_WHOOSH_MIN_ETA seconds of warning left, and not again until it has been calm. A gust that is already blowing
+// (or whose warning is mostly gone) does not fire. A forecast without an eta counts as a fresh warning.
 export function createGustTrigger() {
   let active = false;
   return {
     update(f) {
       const live = !!f && isLive(f) && !!f.dir;
-      const fire = live && !active;
-      active = live;
+      const lead = f && Number.isFinite(f.eta) ? f.eta : WIND_WARNING_S;
+      const fire = live && !active && lead > GUST_WHOOSH_MIN_ETA;
+      active = live; // a gust seen late is still "this gust": it must not fire when its warning is nearly over
       return fire;
     },
     reset() {

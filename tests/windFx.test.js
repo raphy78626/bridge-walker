@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   CALM,
   WIND_OFF,
+  GUST_WHOOSH_MIN_ETA,
   createGustTrigger,
   easeToward,
   forecastOf,
@@ -168,10 +169,35 @@ describe('gust trigger', () => {
     expect(t.update(gust(-1, 0.9))).toBe(false);
   });
 
-  it('still fires for a gust that arrives with no warning, and only once', () => {
+  it('does not fire for a gust that is already blowing', () => {
     const t = createGustTrigger();
-    expect(t.update(gust(1, 0.5))).toBe(true);
     expect(t.update(gust(1, 0.5))).toBe(false);
+    expect(t.update(gust(1, 0.5))).toBe(false);
+  });
+
+  it('fires only while most of the warning is left (the respawn rule)', () => {
+    expect(GUST_WHOOSH_MIN_ETA).toBe(1.2);
+    expect(createGustTrigger().update(warn(1, 0.6, 1.8))).toBe(true);
+    expect(createGustTrigger().update(warn(1, 0.6, 1.25))).toBe(true);
+    expect(createGustTrigger().update(warn(1, 0.6, 1.2))).toBe(false); // not above the threshold
+    expect(createGustTrigger().update(warn(1, 0.6, 0.9))).toBe(false);
+    expect(createGustTrigger().update(warn(1, 0.6, 0.05))).toBe(false);
+  });
+
+  it('a gust joined late stays silent through the rest of its warning, then fires for the next one', () => {
+    // fall during a warning: the forecast goes calm; the respawn lands at eta 0.9 and the warning runs out
+    const t = createGustTrigger();
+    expect(t.update(warn(1, 0.6, 1.8))).toBe(true);
+    expect(t.update(CALM)).toBe(false); // falling
+    expect(t.update(warn(1, 0.6, 0.9))).toBe(false); // respawned part-way through
+    expect(t.update(warn(1, 0.6, 0.5))).toBe(false);
+    expect(t.update(gust(1, 0.6))).toBe(false);
+    expect(t.update(CALM)).toBe(false);
+    expect(t.update(warn(-1, 0.8, 1.8))).toBe(true);
+  });
+
+  it('a warning with no eta counts as a fresh one', () => {
+    expect(createGustTrigger().update({ state: 'warning', dir: 1, strength: 0.5 })).toBe(true);
   });
 
   it('ignores a missing forecast, and reset lets the same gust fire again', () => {

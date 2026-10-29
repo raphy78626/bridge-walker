@@ -182,6 +182,7 @@ function syncResult(result) {
 
 let prev = performance.now();
 let levelPhase = session.phase; // last phase seen, for the level transitions
+let audioPaused = false; // session.paused as the audio last heard it
 let frames = 0;
 let fpsSince = prev;
 function frame(now) {
@@ -202,6 +203,10 @@ function frame(now) {
   session.input.walking = live && controller.walking;
   session.input.running = live && controller.running;
   if (gate.paired) session.update(dt);
+  if (session.paused !== audioPaused) {
+    audioPaused = session.paused; // sound freezes with the game, so a gust whoosh resumes in step with its warning
+    audio.setPaused(audioPaused);
+  }
   if (session.phase !== levelPhase) {
     // Entering 'won' applies the NEXT level's theme, so the sky bake hides behind the win screen.
     const theme = themeForTransition(levelPhase, session.phase, session.level);

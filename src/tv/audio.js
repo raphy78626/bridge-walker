@@ -136,6 +136,7 @@ export function createAudio({
   let amb = null; // the bed that is playing (or fading in): { theme, bus, sources, lfos }
   let theme = DEFAULT_THEME;
   let lastCreak = -Infinity;
+  let paused = false; // the game is paused: the context is suspended, so the ambience and any whoosh freeze together
 
   function warnOnce(key, message, err) {
     if (warned.has(key)) return;
@@ -269,6 +270,7 @@ export function createAudio({
     if (!ensureContext()) return Promise.resolve(false);
     preload();
     if (ctx.state === 'running') return Promise.resolve(true);
+    if (paused) return Promise.resolve(false); // setPaused(false) resumes it
     return Promise.resolve(ctx.resume())
       .then(() => ctx.state === 'running')
       .catch((err) => {
@@ -785,6 +787,19 @@ export function createAudio({
     if (master) master.gain.setTargetAtTime(volume, ctx.currentTime, 0.03);
   }
 
+  // The game's pause: suspending the context freezes everything in it (the ambience and a gust whoosh that is
+  // mid-sweep) so it carries on in step with the game on resume. Remembered when there is no context yet, and a
+  // no-op without one; unlock() leaves a paused context alone.
+  function setPaused(next) {
+    next = !!next;
+    if (next === paused) return;
+    paused = next;
+    if (!ctx) return;
+    const done = paused ? ctx.suspend : ctx.resume;
+    if (typeof done !== 'function') return;
+    Promise.resolve(done.call(ctx)).catch((err) => warnOnce('pause', 'could not suspend or resume the AudioContext', err));
+  }
+
   // The phone's settings sheet: music (the ambience bed) and sound effects, each 0..1. Safe before unlock().
   function setVolumes({ music, sfx: effects }) {
     musicVolume = clamp(Number.isFinite(music) ? music : musicVolume, 0, 1);
@@ -816,6 +831,7 @@ export function createAudio({
     getTheme: () => theme,
     setMasterVolume: safe('setMasterVolume', setMasterVolume),
     setVolumes: safe('setVolumes', setVolumes),
+    setPaused: safe('setPaused', setPaused),
     info,
   };
 }

@@ -14,7 +14,7 @@ import { THEMES } from '../src/tv/themes.js';
 
 // A just-enough fake of the Web Audio API: records what gets created and started.
 function fakeWebAudio({ state = 'running' } = {}) {
-  const log = { gains: [], sources: [], oscillators: 0, stopped: 0 };
+  const log = { gains: [], sources: [], oscillators: 0, stopped: 0, suspends: 0, resumes: 0 };
   const param = () => ({
     value: 0,
     target: undefined,
@@ -98,7 +98,13 @@ function fakeWebAudio({ state = 'running' } = {}) {
       return Promise.resolve(buf);
     }
     resume() {
+      log.resumes++;
       this.state = 'running';
+      return Promise.resolve();
+    }
+    suspend() {
+      log.suspends++;
+      this.state = 'suspended';
       return Promise.resolve();
     }
   }
@@ -386,6 +392,68 @@ describe('setVolumes (the phone settings sheet)', () => {
     const [, sfx, amb] = log.gains;
     expect(amb.gain.value).toBe(0.2);
     expect(sfx.gain.value).toBe(0.7);
+  });
+});
+
+describe('setPaused (the game pause)', () => {
+  it('suspends the context so the ambience and a whoosh mid-sweep freeze, and resumes it', async () => {
+    const { audio, log } = setup();
+    await audio.unlock();
+    const resumes = log.resumes;
+    audio.setPaused(true);
+    expect(log.suspends).toBe(1);
+    expect(audio.info().state).toBe('suspended');
+    audio.setPaused(false);
+    expect(log.resumes).toBe(resumes + 1);
+    expect(audio.info().state).toBe('running');
+  });
+
+  it('does nothing when the state has not changed', async () => {
+    const { audio, log } = setup();
+    await audio.unlock();
+    audio.setPaused(false);
+    expect(log.suspends).toBe(0);
+    audio.setPaused(true);
+    audio.setPaused(true);
+    expect(log.suspends).toBe(1);
+    audio.setPaused(false);
+    audio.setPaused(false);
+    expect(log.suspends).toBe(1);
+  });
+
+  it('plays no one-shots while paused, and an unlock() does not undo the pause', async () => {
+    const { audio, log } = setup();
+    await audio.unlock();
+    audio.setPaused(true);
+    const sources = log.sources.length;
+    audio.gust({ dir: 1, strength: 1 });
+    expect(log.sources.length).toBe(sources);
+    const resumes = log.resumes;
+    expect(await audio.unlock()).toBe(false); // e.g. a keypress while paused
+    expect(log.resumes).toBe(resumes);
+    audio.setPaused(false);
+    expect(audio.info().state).toBe('running');
+  });
+
+  it('is a no-op without a context, and the pause is still remembered for when one exists', async () => {
+    const { audio, log } = setup();
+    audio.setPaused(true);
+    audio.setPaused(false);
+    expect(log.suspends).toBe(0);
+    const none = createAudio({ baseUrl: '/', AudioContextClass: undefined, fetchFn: undefined });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(() => none.setPaused(true)).not.toThrow();
+    expect(() => none.setPaused(false)).not.toThrow();
+  });
+
+  it('never throws when the context refuses to suspend', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { FakeContext } = fakeWebAudio();
+    FakeContext.prototype.suspend = () => Promise.reject(new Error('nope'));
+    const audio = createAudio({ baseUrl: '/', AudioContextClass: FakeContext, fetchFn: okFetch() });
+    await audio.unlock();
+    expect(() => audio.setPaused(true)).not.toThrow();
+    await Promise.resolve();
   });
 });
 
