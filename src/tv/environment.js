@@ -27,13 +27,15 @@ export function buildEnvironment(scene, renderer, { theme, lite = false }) {
   // The unlit vertex colours (crevice shading, depth, tint) are kept so every re-bake starts from them and never compounds.
   const rockBase = lite ? cliffs.geometry.attributes.color.array.slice() : null;
   const falls = buildWaterfalls(hosts);
-  const clouds = buildClouds(scene.fog, lite ? 60 : 300);
+  const clouds = lite ? buildClouds(scene.fog, 14, 4) : buildClouds(scene.fog, 300);
+  const cloudFloor = lite ? buildCloudFloor() : null;
   const birds = buildBirds();
   const stars = buildStars();
   const windU = createWindUniforms(); // shared by the ropes and the cloth markers (windSway.js)
   const bridge = buildBridge(aniso, lite, windU);
   const gate = buildGate(rock);
   const parts = { cliffs, bridge: bridge.group, gate: gate.mesh, clouds: clouds.mesh, falls: falls.group, birds: birds.points, stars: stars.points };
+  if (cloudFloor) parts.cloudFloor = cloudFloor.mesh;
   for (const [name, obj] of Object.entries(parts)) obj.name = name; // names make remote profiling on the TV readable
   scene.add(...Object.values(parts));
 
@@ -48,6 +50,7 @@ export function buildEnvironment(scene, renderer, { theme, lite = false }) {
     if (lite) bakeRockLighting(cliffs.geometry, rockBase, next);
     else rock.color.setRGB(...next.rock.tint);
     clouds.setTheme(next, scene.fog);
+    cloudFloor?.setTheme(next);
     falls.setTint(next.falls.tint);
     birds.points.visible = next.birds;
     stars.points.visible = next.stars;
@@ -892,7 +895,9 @@ function cloudAtlas() {
 }
 
 // One instanced draw: camera-facing quads, painted far-to-near, slowly drifting, fading into the fog.
-function buildClouds(fog, count) {
+// The TV draws a sparse set of cards over one opaque cloud layer (buildCloudFloor): profiled on the LG TV, the 60 cards
+// plus 16 mist sheets of the full sea cost it ~10 fps of overdraw on their own (31 fps at 0.8 scale, 47 without them).
+function buildClouds(fog, count, mistCount = 16) {
   const rand = mulberry32(2024);
   const items = [];
   for (let i = 0; i < count; i++) {
@@ -912,7 +917,7 @@ function buildClouds(fog, count) {
       alpha: 0.75 + rand() * 0.25,
     });
   }
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < mistCount; i++) {
     // thin mist hugging the far end of the canyon
     items.push({ x: (rand() - 0.5) * 50, y: -7 + rand() * 8, z: -72 - rand() * 70, w: 50 + rand() * 40, h: 12 + rand() * 8, cell: 3, tone: 1.7, phase: rand(), alpha: 0.5 });
   }
@@ -994,6 +999,47 @@ function buildClouds(fog, count) {
     },
   };
 }
+
+// One opaque, cloud-textured layer under the cards (TV only): a single layer of overdraw that keeps the sea looking
+// full when only a few blended cards float above it. Tinted per theme like the cards.
+function buildCloudFloor() {
+  const S = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = S;
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#c9c6c2';
+  g.fillRect(0, 0, S, S);
+  const rand = mulberry32(77);
+  for (let i = 0; i < 90; i++) {
+    const x = rand() * S;
+    const y = rand() * S;
+    const r = 12 + rand() * 46;
+    const light = rand() < 0.65;
+    for (const [dx, dy] of [[0, 0], [S, 0], [-S, 0], [0, S], [0, -S]]) { // drawn wrapped, so the texture tiles seamlessly
+      const grad = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+      grad.addColorStop(0, light ? 'rgba(255,255,255,0.55)' : 'rgba(120,118,116,0.35)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad;
+      g.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(7, 7);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.MeshBasicMaterial({ map: tex });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = CLOUD_FLOOR_Y;
+  return {
+    mesh,
+    setTheme(theme) {
+      material.color.setRGB(...theme.clouds.tint).multiplyScalar(1.45); // about the cards' brightness
+      mesh.position.y = CLOUD_FLOOR_Y + theme.clouds.lift;
+    },
+  };
+}
+const CLOUD_FLOOR_Y = -31; // just under the lowest cloud cards (about -34 to -21)
 
 // ---------- waterfalls ----------
 

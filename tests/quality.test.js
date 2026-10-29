@@ -77,10 +77,11 @@ describe('nextQuality', () => {
       expect(s.scale).toBe(0.6);
     });
 
-    it('can win resolution back at 46-50 fps, the most a 50 Hz TV ever shows', () => {
-      const once = tv(48, { shadows: false });
+    it('wins resolution back at 46-50 fps after dropping, but only up to its 0.7 ceiling', () => {
+      const once = nextQuality(48, start({ scale: 0.6, shadows: false }), TV_QUALITY);
       expect(once.goodStreak).toBe(1);
-      expect(nextQuality(48, once, TV_QUALITY).scale).toBe(0.85);
+      expect(nextQuality(48, once, TV_QUALITY).scale).toBe(0.7);
+      expect(nextQuality(48, { scale: 0.7, shadows: false, goodStreak: 1 }, TV_QUALITY).scale).toBe(0.7);
     });
 
     it('holds steady in the 38-46 fps band', () => {
@@ -120,8 +121,9 @@ describe('nextQuality', () => {
       expect(s).toEqual({ scale: 0.7, shadows: false, goodStreak: 0 });
     });
 
-    it('stops at full app resolution (1.0)', () => {
-      expect(nextQuality(48, start({ scale: 1, goodStreak: 1 }), TV_QUALITY).scale).toBe(1);
+    it('sits at 0.7: the most that holds the panel\'s 50 fps on the measured TV', () => {
+      expect(TV_QUALITY.maxScale).toBe(0.7);
+      expect(TV_QUALITY.startScale).toBe(0.7);
     });
   });
 

@@ -11,11 +11,11 @@ const GOOD_READINGS = 2;
 // Desktop defaults: drop resolution under 40 fps, shadows under 35 at the floor, win back above 55.
 const DESKTOP = { minScale: MIN_SCALE, maxScale: 1.5, slowFps: 40, verySlowFps: 35, fastFps: 55 };
 
-// Measured on an LG 55UR9050 (PowerVR BXE-4-32, 50 Hz panel) with the lite scene: 0.6 -> 45-49 fps,
-// 0.7 -> ~43, 0.75 -> 37-39, 1.0 -> 28. Nothing exceeds 50 fps, so "fast" must sit below that, and
-// 0.4 (512x288) looked blocky on a 55" screen, so the floor is 0.6. Starting at 0.7 sits inside the
-// 38-46 band, so it holds there instead of bouncing (each change reallocates the drawing buffer).
-export const TV_QUALITY = { minScale: 0.6, maxScale: 1, slowFps: 38, verySlowFps: 32, fastFps: 46, startScale: 0.7, shadows: false };
+// Measured on an LG 55UR9050 (PowerVR BXE-4-32, 50 Hz panel). With the TV's sparse clouds over one opaque cloud layer
+// the scene holds the panel's 50 fps at 0.7 scale; 0.8 drops to ~45 and judders, so 0.7 is also the ceiling. The floor
+// stays 0.6 (0.4, 512x288, looked blocky on a 55" screen). Each scale change reallocates the drawing buffer, so the
+// TV should simply sit at 0.7.
+export const TV_QUALITY = { minScale: 0.6, maxScale: 0.7, slowFps: 38, verySlowFps: 32, fastFps: 46, startScale: 0.7, shadows: false };
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
