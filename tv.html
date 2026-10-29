@@ -78,13 +78,49 @@
     <canvas id="game"></canvas>
 
     <div id="hud">
-      <div class="pill left"><span id="timer">00:00</span><small id="level">Level 1</small></div>
-      <div class="pill right"><span id="dist">0 / 60 m</span><span id="lives">❤ 3</span></div>
+      <div class="pill left"><span id="timer">00:00</span><small id="par"></small><small id="level">Level 1</small></div>
+      <div class="pill right"><span id="dist">0 / 60 m</span><span id="lives">❤ 3</span><small id="score"></small></div>
       <div id="balance"><div id="balance-needle"></div></div>
+      <div id="wind" class="wind" hidden>
+        <div class="wind-body">
+          <span class="wind-label">WIND</span>
+          <span class="wind-lane">
+            <svg class="wind-arrow" viewBox="0 0 120 48" aria-hidden="true"><path d="M4 17h68V3l44 21-44 21V31H4z" /></svg>
+          </span>
+          <span class="wind-bar" aria-hidden="true"><i></i><i></i><i></i></span>
+        </div>
+      </div>
       <div id="gap-hint" hidden></div>
       <div id="level-banner" hidden></div>
       <div id="cam-toast" hidden></div>
       <div id="message"></div>
+    </div>
+
+    <div id="results" class="results" hidden>
+      <div class="res-card">
+        <p id="res-title" class="res-title">LEVEL COMPLETE</p>
+        <div class="res-level">
+          <div class="res-stars" aria-hidden="true">
+            <span id="res-star-0" class="star">★</span><span id="res-star-1" class="star">★</span><span id="res-star-2" class="star">★</span>
+          </div>
+          <p id="res-new" class="res-new" hidden>NEW BEST!</p>
+          <dl class="res-grid">
+            <div><dt>TIME</dt><dd id="res-time">0:00</dd><small id="res-par"></small></div>
+            <div><dt>FALLS</dt><dd id="res-falls">0</dd></div>
+            <div><dt>LEVEL SCORE</dt><dd id="res-score">0</dd></div>
+            <div><dt>RUN TOTAL</dt><dd id="res-total">0</dd></div>
+          </dl>
+          <p id="res-best" class="res-best"></p>
+        </div>
+        <div class="res-run">
+          <p id="run-level" class="run-level"></p>
+          <p class="run-label">RUN SCORE</p>
+          <p id="run-score" class="run-score">0</p>
+          <p id="run-best" class="res-best"></p>
+          <p id="run-new" class="res-new" hidden>NEW BEST RUN!</p>
+        </div>
+        <p id="res-next" class="res-next"></p>
+      </div>
     </div>
 
     <div id="pairing">

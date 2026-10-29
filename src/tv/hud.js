@@ -1,5 +1,7 @@
 import { BRIDGE_LENGTH, distanceToNextGap } from '../game/session.js';
 import { FALL_ANGLE } from '../game/balance.js';
+import { WIND_OFF, windIndicator } from './windFx.js';
+import { formatPar, formatScore, underPar } from './results.js';
 
 export function formatTime(sec) {
   const m = Math.floor(sec / 60);
@@ -52,11 +54,24 @@ function timedText(el, ms, timers) {
   };
 }
 
+// The wind indicator's class list for a windIndicator() result: "wind warning from-left lvl-2".
+export function windClass(ind) {
+  return `wind ${ind.state} from-${ind.from} lvl-${ind.level}`;
+}
+
 export function createHud(doc = document, timers = globalThis) {
   const $ = (id) => doc.getElementById(id);
   let shownHint = ''; // the DOM is touched only when the hint changes; the pulse is a CSS animation
+  let shownWind = WIND_OFF; // likewise the wind arrow: windIndicator() returns shared objects, so === says "unchanged"
+  let underParShown = false;
   let banner = null; // created on first use, so a page without these elements still works
   let toast = null;
+  const shown = {}; // id -> the text last written, so a frame that changes nothing writes nothing
+  const setText = (id, text) => {
+    if (shown[id] === text) return;
+    shown[id] = text;
+    $(id).textContent = text;
+  };
   return {
     showBanner(text) {
       banner ??= timedText($('level-banner'), BANNER_MS, timers);
@@ -85,20 +100,62 @@ export function createHud(doc = document, timers = globalThis) {
     hidePairing() {
       $('pairing').hidden = true;
     },
+    // The end-of-level or end-of-run panel. v comes from resultView() (results.js); the stars animate in one by
+    // one with CSS, which restarts each time the panel goes from hidden to shown.
+    showResults(v) {
+      if (!v) return;
+      const level = v.kind === 'level';
+      $('results').className = `results ${v.kind}`;
+      $('res-title').textContent = v.title;
+      $('res-next').textContent = v.next;
+      if (level) {
+        for (let i = 0; i < 3; i++) $(`res-star-${i}`).className = i < v.stars ? 'star on' : 'star';
+        $('res-time').textContent = v.time;
+        $('res-par').textContent = v.par;
+        $('res-falls').textContent = v.falls;
+        $('res-score').textContent = v.score;
+        $('res-total').textContent = v.runScore;
+        $('res-new').hidden = !v.isNew;
+        $('res-best').textContent = `BEST  ${v.bestScore} pts${v.bestTime ? `  ·  ${v.bestTime}` : ''}`;
+      } else {
+        $('run-level').textContent = v.level;
+        $('run-score').textContent = v.runScore;
+        $('run-best').textContent = `BEST RUN  ${v.bestRun} pts`;
+        $('run-new').hidden = !v.isNew;
+      }
+      $('results').hidden = false;
+    },
+    hideResults() {
+      $('results').hidden = true;
+    },
     render(s) {
       const balance = Math.max(-1, Math.min(1, s.walker.lean / FALL_ANGLE));
-      $('timer').textContent = formatTime(s.time);
-      $('level').textContent = `Level ${s.level}`;
-      $('dist').textContent = `${Math.min(BRIDGE_LENGTH, Math.floor(s.walker.z))} / ${BRIDGE_LENGTH} m`;
-      $('lives').textContent = `❤ ${s.lives}`;
+      setText('timer', formatTime(s.time));
+      const gold = underPar(s.time, s.parTime);
+      if (gold !== underParShown) {
+        underParShown = gold;
+        $('timer').classList?.toggle('under-par', gold); // gold while under par, normal once over it
+      }
+      setText('par', formatPar(s.parTime));
+      setText('level', `Level ${s.level}`);
+      setText('dist', `${Math.min(BRIDGE_LENGTH, Math.floor(s.walker.z))} / ${BRIDGE_LENGTH} m`);
+      setText('lives', `❤ ${s.lives}`);
+      setText('score', Number.isFinite(s.runScore) ? `${formatScore(s.runScore)} pts` : '');
       $('balance-needle').style.left = `${50 + 50 * balance}%`;
       $('balance').classList.toggle('danger', Math.abs(balance) > 0.7);
-      $('message').textContent = messageFor(s);
+      setText('message', s.result ? '' : messageFor(s)); // the results panel says it all
       const hint = gapHint(s);
       if (hint !== shownHint) {
         shownHint = hint;
         $('gap-hint').textContent = hint;
         $('gap-hint').hidden = !hint;
+      }
+      const wind = windIndicator(s.forecast);
+      if (wind !== shownWind) {
+        shownWind = wind;
+        const el = $('wind');
+        if (wind.visible) el.className = windClass(wind);
+        el.hidden = !wind.visible;
       }
     },
   };

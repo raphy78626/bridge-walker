@@ -23,6 +23,11 @@ html, body {
 .pill.left { left: 4vw; }
 .pill.right { right: 4vw; text-align: right; }
 .pill small { font-size: 2vh; opacity: 0.8; }
+.pill small:empty { display: none; }
+#timer { transition: color 0.3s; }
+#timer.under-par { color: #ffd24a; } /* still ahead of par */
+#par { letter-spacing: 0.06em; }
+#score { color: #ffd24a; font-size: 2.4vh; font-weight: 700; opacity: 1; }
 #balance {
   position: absolute;
   bottom: 7vh;
@@ -124,3 +129,145 @@ html, body {
 #pairing .url { opacity: 0.6; font-size: 2vh; }
 #pairing .credits { opacity: 0.45; font-size: 1.4vh; max-width: 70vw; text-align: center; }
 #qr { background: #fff; border-radius: 12px; }
+
+/* ---------- wind warning ---------- */
+/* On the side the wind comes FROM, the arrow pointing the way it blows. Pulses through the warning, solid and
+   bigger in the gust. Only transform and opacity animate. */
+.wind {
+  position: absolute;
+  top: 26vh;
+  transform-origin: center;
+  transition: transform 0.15s ease-out;
+}
+.wind[hidden] { display: none; }
+.wind.from-left { left: 3vw; transform-origin: left center; }
+.wind.from-right { right: 3vw; transform-origin: right center; }
+.wind.gust { transform: scale(1.35); }
+.wind-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1vh;
+  padding: 1.6vh 2.4vh 1.8vh;
+  border-radius: 2vh;
+  background: rgba(14, 20, 30, 0.72);
+  border: 0.4vh solid #ffb020;
+  color: #ffb020;
+  animation: wind-pulse 0.45s ease-in-out infinite alternate;
+}
+.wind.gust .wind-body {
+  background: #ffb020;
+  border-color: #fff3cf;
+  color: #1b1405;
+  animation: none;
+  box-shadow: 0 0 3vh rgba(255, 176, 32, 0.8);
+}
+.wind-label { font-size: 2.8vh; font-weight: 900; letter-spacing: 0.22em; text-indent: 0.22em; }
+.wind-lane { display: block; animation: wind-nudge-r 0.5s ease-in-out infinite alternate; }
+.wind.from-right .wind-lane { animation-name: wind-nudge-l; }
+.wind.gust .wind-lane { animation-duration: 0.3s; }
+.wind-arrow { display: block; width: 17vh; height: 6.8vh; fill: currentColor; }
+.wind.from-right .wind-arrow { transform: scaleX(-1); }
+.wind-bar { display: flex; align-items: flex-end; gap: 0.7vh; height: 3vh; }
+.wind-bar i { display: block; width: 1.4vh; border-radius: 0.3vh; background: currentColor; opacity: 0.25; }
+.wind-bar i:nth-child(1) { height: 1.2vh; }
+.wind-bar i:nth-child(2) { height: 2.1vh; }
+.wind-bar i:nth-child(3) { height: 3vh; }
+.wind.lvl-1 .wind-bar i:nth-child(-n + 1),
+.wind.lvl-2 .wind-bar i:nth-child(-n + 2),
+.wind.lvl-3 .wind-bar i:nth-child(-n + 3) { opacity: 1; }
+@keyframes wind-pulse {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(1.06); opacity: 0.65; }
+}
+@keyframes wind-nudge-r {
+  from { transform: translateX(-0.8vh); }
+  to { transform: translateX(1.4vh); }
+}
+@keyframes wind-nudge-l {
+  from { transform: translateX(0.8vh); }
+  to { transform: translateX(-1.4vh); }
+}
+
+/* ---------- results ---------- */
+.results {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.results[hidden] { display: none; }
+.res-card {
+  min-width: 74vh;
+  padding: 3.4vh 6vh 3.2vh;
+  border-radius: 3vh;
+  background: rgba(10, 14, 20, 0.82);
+  border: 0.3vh solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 1.5vh 6vh rgba(0, 0, 0, 0.55);
+  text-align: center;
+  animation: card-in 0.4s ease-out;
+}
+.res-card p { margin: 0; }
+.res-title { font-size: 3.2vh; font-weight: 800; letter-spacing: 0.18em; opacity: 0.9; }
+.results.run .res-level, .results.level .res-run { display: none; }
+.res-stars { display: flex; justify-content: center; gap: 1.6vh; margin: 0.6vh 0 0.2vh; }
+.star {
+  display: block;
+  font-size: 15vh;
+  line-height: 1.05;
+  color: rgba(255, 255, 255, 0.16);
+}
+.star.on {
+  color: #ffd24a;
+  text-shadow: 0 0 3vh rgba(255, 190, 40, 0.85);
+  opacity: 0;
+  animation: star-in 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) forwards;
+}
+#res-star-0 { animation-delay: 0.45s; }
+#res-star-1 { animation-delay: 0.95s; }
+#res-star-2 { animation-delay: 1.45s; }
+.res-new {
+  display: inline-block;
+  margin: 1.4vh auto 1vh;
+  padding: 0.7vh 2.4vh;
+  border-radius: 99vh;
+  background: #ffd24a;
+  color: #2a1d00;
+  font-size: 3vh;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  opacity: 0;
+  animation: star-in 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) 1.9s forwards;
+}
+.res-new[hidden] { display: none; }
+.res-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.6vh 4vh;
+  margin: 1.6vh 0 0;
+}
+.res-grid div { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.res-grid dt { font-size: 2vh; font-weight: 700; letter-spacing: 0.16em; opacity: 0.65; }
+.res-grid dd { margin: 0; font-size: 5.6vh; font-weight: 800; line-height: 1.1; }
+.res-grid small { font-size: 2vh; opacity: 0.7; letter-spacing: 0.06em; }
+.res-grid small:empty { display: none; }
+.res-best { margin-top: 1.8vh !important; font-size: 2.4vh; font-weight: 600; opacity: 0.75; letter-spacing: 0.05em; }
+.run-level { font-size: 3.4vh; font-weight: 700; margin-top: 1.6vh !important; }
+.run-label { font-size: 2.2vh; letter-spacing: 0.2em; opacity: 0.65; margin-top: 2.4vh !important; }
+.run-score { font-size: 12vh; font-weight: 900; line-height: 1.05; color: #ffd24a; }
+.res-next {
+  margin-top: 2.6vh !important;
+  font-size: 3.2vh;
+  font-weight: 700;
+  animation: wind-pulse 0.9s ease-in-out infinite alternate;
+}
+@keyframes star-in {
+  from { transform: scale(0.2) rotate(-25deg); opacity: 0; }
+  to { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes card-in {
+  from { transform: translateY(2vh); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

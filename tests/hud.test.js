@@ -145,3 +145,134 @@ describe('banner and toast', () => {
     expect(t.pending[0].ms).toBeLessThan(3000);
   });
 });
+
+describe('wind indicator, timer, score and results panel', () => {
+  // Every element records its writes, so a test can see exactly what the HUD touched.
+  function recorder() {
+    const writes = [];
+    const els = {};
+    const doc = {
+      els,
+      getElementById: (id) =>
+        (els[id] ??= new Proxy(
+          { style: {}, classList: { toggle(name, on) { writes.push([id, 'class:' + name, on]); } }, hidden: false },
+          {
+            set(o, k, v) {
+              writes.push([id, k, v]);
+              o[k] = v;
+              return true;
+            },
+          },
+        )),
+    };
+    return { doc, writes, only: (id) => writes.filter((w) => w[0] === id) };
+  }
+  const state = (extra = {}) => ({ phase: 'playing', time: 5, level: 1, lives: 3, walker: { z: 3, lean: 0 }, ...extra });
+  const forecast = (st, dir, strength = 0.5) => ({ state: st, dir, strength, eta: 1, remaining: 0 });
+
+  it('stays untouched while calm, and for a session with no forecast at all', () => {
+    const r = recorder();
+    const hud = createHud(r.doc);
+    hud.render(state());
+    hud.render(state({ forecast: forecast('calm', 0) }));
+    expect(r.only('wind')).toEqual([]);
+  });
+
+  it('shows the arrow on the side the wind comes from and writes only when something changes', () => {
+    const r = recorder();
+    const hud = createHud(r.doc);
+    hud.render(state({ forecast: forecast('warning', 1, 0.5) }));
+    expect(r.only('wind')).toEqual([['wind', 'className', 'wind warning from-left lvl-2'], ['wind', 'hidden', false]]);
+    r.writes.length = 0;
+    for (const eta of [1.5, 1.0, 0.5]) hud.render(state({ forecast: { ...forecast('warning', 1, 0.52), eta } }));
+    expect(r.only('wind')).toEqual([]); // same state, side and strength step: no DOM writes
+    hud.render(state({ forecast: forecast('gust', 1, 0.52) }));
+    expect(r.only('wind')).toEqual([['wind', 'className', 'wind gust from-left lvl-2'], ['wind', 'hidden', false]]);
+    r.writes.length = 0;
+    hud.render(state({ forecast: forecast('gust', -1, 0.95) }));
+    expect(r.only('wind')).toEqual([['wind', 'className', 'wind gust from-right lvl-3'], ['wind', 'hidden', false]]);
+    r.writes.length = 0;
+    hud.render(state({ forecast: forecast('calm', 0) }));
+    expect(r.only('wind')).toEqual([['wind', 'hidden', true]]);
+  });
+
+  it('shows the par, and the timer is gold only while under it', () => {
+    const r = recorder();
+    const hud = createHud(r.doc);
+    hud.render(state({ time: 10, parTime: 32 }));
+    expect(r.doc.els.par.textContent).toBe('PAR 0:32');
+    expect(r.only('timer').filter((w) => w[1] === 'class:under-par')).toEqual([['timer', 'class:under-par', true]]);
+    hud.render(state({ time: 20, parTime: 32 }));
+    expect(r.only('timer').filter((w) => w[1] === 'class:under-par')).toHaveLength(1); // no repeat write
+    hud.render(state({ time: 33, parTime: 32 }));
+    expect(r.only('timer').filter((w) => w[1] === 'class:under-par').pop()).toEqual(['timer', 'class:under-par', false]);
+  });
+
+  it('has no par and no gold timer when the session does not supply one', () => {
+    const r = recorder();
+    const hud = createHud(r.doc);
+    hud.render(state());
+    expect(r.doc.els.par.textContent).toBe('');
+    expect(r.only('timer').filter((w) => w[1] === 'class:under-par')).toEqual([]);
+  });
+
+  it('shows the run score under the lives', () => {
+    const r = recorder();
+    const hud = createHud(r.doc);
+    hud.render(state({ runScore: 1240 }));
+    expect(r.doc.els.score.textContent).toBe('1,240 pts');
+    hud.render(state());
+    expect(r.doc.els.score.textContent).toBe('');
+  });
+
+  it('does not rewrite unchanged text every frame', () => {
+    const r = recorder();
+    const hud = createHud(r.doc);
+    hud.render(state());
+    r.writes.length = 0;
+    hud.render(state());
+    hud.render(state());
+    expect(r.writes.filter((w) => w[1] === 'textContent')).toEqual([]);
+  });
+
+  it('fills the level results panel and shows it', () => {
+    const r = recorder();
+    const hud = createHud(r.doc);
+    hud.showResults({
+      kind: 'level', title: 'LEVEL 2 COMPLETE', stars: 2, time: '0:29', par: 'PAR 0:32', falls: '1', score: '1,240',
+      runScore: '3,390', bestScore: '1,500', bestTime: '0:27', isNew: true, next: 'Press START for Level 3',
+    });
+    const e = r.doc.els;
+    expect(e.results).toMatchObject({ hidden: false, className: 'results level' });
+    expect(e['res-title'].textContent).toBe('LEVEL 2 COMPLETE');
+    expect([0, 1, 2].map((i) => e[`res-star-${i}`].className)).toEqual(['star on', 'star on', 'star']);
+    expect(e['res-time'].textContent).toBe('0:29');
+    expect(e['res-falls'].textContent).toBe('1');
+    expect(e['res-score'].textContent).toBe('1,240');
+    expect(e['res-total'].textContent).toBe('3,390');
+    expect(e['res-new'].hidden).toBe(false);
+    expect(e['res-best'].textContent).toContain('1,500');
+    expect(e['res-next'].textContent).toBe('Press START for Level 3');
+    hud.hideResults();
+    expect(e.results.hidden).toBe(true);
+  });
+
+  it('fills the run summary, with NEW BEST RUN only when beaten', () => {
+    const r = recorder();
+    const hud = createHud(r.doc);
+    hud.showResults({ kind: 'run', title: 'GAME OVER', level: 'Reached level 3', runScore: '3,400', bestRun: '5,120', isNew: false, next: 'Press START to try again' });
+    expect(r.doc.els.results.className).toBe('results run');
+    expect(r.doc.els['run-score'].textContent).toBe('3,400');
+    expect(r.doc.els['run-best'].textContent).toContain('5,120');
+    expect(r.doc.els['run-new'].hidden).toBe(true);
+  });
+
+  it('hides the "You crossed" message while the results panel is up', () => {
+    const r = recorder();
+    const hud = createHud(r.doc);
+    hud.render(state({ phase: 'won' }));
+    expect(r.doc.els.message.textContent).toBe('You crossed! Press START for level 2');
+    hud.render(state({ phase: 'won', result: { kind: 'level', level: 1 } }));
+    expect(r.doc.els.message.textContent).toBe('');
+  });
+});
