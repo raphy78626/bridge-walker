@@ -8,7 +8,7 @@
 // the next theme in the background; buffers that neither the current nor the next theme needs are dropped.
 
 import { THEMES } from './themes.js';
-import { WIND_WARNING_S } from './windFx.js';
+import { WIND_WARNING_S } from '../game/forecast.js';
 
 export const AUDIO_FILES = {
   ambienceWater: 'ambience_water.ogg',

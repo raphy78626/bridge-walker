@@ -5,7 +5,8 @@
 // dir +1 pushes the walker to the RIGHT, which on screen is wind blowing from the left edge to the right edge.
 // Until the rules supply it, a missing forecast reads as calm.
 
-export const WIND_WARNING_S = 1.8; // seconds of warning before a gust (the session exports the same number)
+import { WIND_WARNING_S } from '../game/forecast.js'; // seconds of warning before a gust: one definition, in the rules
+
 export const CALM = Object.freeze({ state: 'calm', dir: 0, strength: 0, eta: 0, remaining: 0 });
 
 const clamp01 = (x) => (x > 0 ? (x < 1 ? x : 1) : 0); // NaN and negatives give 0

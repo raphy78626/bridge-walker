@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   CALM,
   WIND_OFF,
-  WIND_WARNING_S,
   createGustTrigger,
   easeToward,
   forecastOf,
@@ -15,6 +14,7 @@ import {
   windSway,
   STREAK_MAX_OPACITY,
 } from '../src/tv/windFx.js';
+import { WIND_WARNING_S } from '../src/game/forecast.js';
 
 const warn = (dir, strength, eta = 1.8) => ({ state: 'warning', dir, strength, eta, remaining: eta + 1 });
 const gust = (dir, strength) => ({ state: 'gust', dir, strength, eta: 0, remaining: 1 });
