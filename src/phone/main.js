@@ -1,15 +1,11 @@
 import { connect } from '../shared/client.js';
 import { createTiltReader } from './tilt.js';
+import { createGustTrigger, windIndicator } from '../tv/windFx.js'; // pure helpers, no three.js
+import { statusText } from './status.js';
 
 const SIGN_KEY = 'bridge.tiltSign';
-const STATUS = {
-  lobby: 'Press Start',
-  playing: 'Balance! Jump the gaps',
-  falling: 'You fell!',
-  gameover: 'Game over — press Start',
-  won: 'You made it! Start for the next level',
-};
 
+const gusts = createGustTrigger();
 const $ = (id) => document.getElementById(id);
 const room = (new URLSearchParams(location.search).get('room') ?? '').toUpperCase();
 const tilt = createTiltReader();
@@ -98,10 +94,24 @@ function onMessage(msg) {
   } else if (msg.t === 'peer-left') {
     showProblem('TV disconnected — scan the new QR code on the TV');
   } else if (msg.t === 'state') {
-    $('status').textContent = `${STATUS[msg.phase]} · ❤ ${msg.lives} · Level ${msg.level}`;
+    $('status').textContent = statusText(msg);
+    showWind(msg);
     $('btn-start').hidden = msg.phase === 'playing' || msg.phase === 'falling';
     if (msg.phase === 'falling') navigator.vibrate?.(300);
   }
+}
+
+// A small arrow next to the balance meter while a gust is coming or blowing, one buzz per warning (Android only).
+function showWind(msg) {
+  const ind = windIndicator({ state: msg.wind, dir: msg.windDir, strength: 0.6 });
+  for (const side of ['left', 'right']) {
+    const chip = $(`wind-${side}`);
+    const on = ind.visible && ind.from === side;
+    chip.hidden = !on;
+    chip.className = on ? `wind-chip ${ind.state}` : 'wind-chip';
+  }
+  $('wind-text').textContent = ind.visible ? 'WIND' : '';
+  if (gusts.update({ state: msg.wind, dir: msg.windDir })) navigator.vibrate?.(40);
 }
 
 function startCalibration() {

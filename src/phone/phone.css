@@ -85,7 +85,16 @@ html, body {
 }
 .centre p { margin: 0; font-size: 0.95rem; }
 .centre .big { min-width: 0; padding: 12px 28px; font-size: 1.1rem; }
-.centre .meter { width: 100%; }
+.centre .meter { flex: 1; min-width: 0; }
+/* The balance meter with a wind arrow beside it, on the side the wind comes from, pointing the way it blows. */
+.meter-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+.wind-chip { flex: none; width: 34px; height: 16px; color: #ffb020; }
+.wind-chip[hidden] { display: block; visibility: hidden; } /* keeps its space, so the meter never jumps */
+.wind-chip svg { display: block; width: 100%; height: 100%; fill: currentColor; }
+.wind-chip.warning { animation: wind-blink 0.45s ease-in-out infinite alternate; }
+.wind-chip.gust { transform: scale(1.35); filter: drop-shadow(0 0 6px #ffb020); }
+.wind-text { min-height: 1.1em; color: #ffb020; font-weight: 800; letter-spacing: 0.12em; font-size: 0.8rem !important; }
+@keyframes wind-blink { from { opacity: 1; } to { opacity: 0.3; } }
 .ctl {
   flex: 1;
   min-height: 0;

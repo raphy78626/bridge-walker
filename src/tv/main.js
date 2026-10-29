@@ -8,6 +8,9 @@ import { createAudio, createEagleScheduler } from './audio.js';
 import { createCueTracker, playCues } from './audioCues.js';
 import { themeForLevel } from './themes.js';
 import { themeForTransition, levelBanner } from './levelFlow.js';
+import { createGustTrigger, forecastOf } from './windFx.js';
+import { recordLevel, recordRun, resultView, sameResult } from './results.js';
+import { buildStateMessage, createStateSync } from './stateSync.js';
 import { CAMERA_LABELS, loadCameraMode, saveCameraMode } from './cameras.js';
 
 const session = createSession({ seed: Date.now() % 100000 });
@@ -17,6 +20,9 @@ const controller = { tilt: 0, walking: false, running: false }; // the phone's l
 const audio = createAudio();
 const soundCues = createCueTracker();
 const eagles = createEagleScheduler({ audio });
+const gusts = createGustTrigger(); // one whoosh per gust, at the start of its warning
+const stateSync = createStateSync(); // tells the loop when the phone's status line needs a new message
+let shownResult = null; // the session.result the panel is showing
 startSound();
 // Where autoplay is blocked (a TV's browser app, desktop testing), any remote key or click counts.
 for (const type of ['keydown', 'pointerdown']) window.addEventListener(type, startSound, { once: true });
@@ -142,13 +148,34 @@ async function onMessage(msg) {
 }
 
 function pushState() {
-  net?.send({ t: 'state', phase: session.phase, lives: session.lives, level: session.level });
+  stateSync.changed(session); // the message below is the latest, so the loop need not send it again
+  net?.send(buildStateMessage(session));
+}
+
+// localStorage can be missing or throw (private mode, a locked-down TV browser): records then just are not kept.
+function storage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+// Shows the results panel for a new session.result (best scores are kept per level, and for the run), and hides it
+// when the result goes away. A level result and a run result each call this once.
+function syncResult(result) {
+  if (sameResult(result, shownResult)) return;
+  shownResult = result;
+  if (!result) {
+    hud.hideResults();
+    return;
+  }
+  const recorded = result.kind === 'run' ? recordRun(storage(), result) : recordLevel(storage(), result);
+  hud.showResults(resultView(result, recorded));
 }
 
 let prev = performance.now();
-let sentPhase = null;
 let levelPhase = session.phase; // last phase seen, for the level transitions
-let sentLives = null;
 let frames = 0;
 let fpsSince = prev;
 function frame(now) {
@@ -177,11 +204,10 @@ function frame(now) {
     if (banner) hud.showBanner(banner);
     levelPhase = session.phase;
   }
-  if (session.phase !== sentPhase || session.lives !== sentLives) {
-    sentPhase = session.phase;
-    sentLives = session.lives;
-    pushState();
-  }
+  if (stateSync.changed(session)) net?.send(buildStateMessage(session)); // phase, lives, level, wind, result: on change only
+  const forecast = forecastOf(session);
+  if (gusts.update(forecast)) audio.gust({ dir: forecast.dir, strength: forecast.strength });
+  syncResult(session.result ?? null);
   playCues(audio, soundCues.update(session), session.walker.speed); // footsteps, jump, landing, scream
   eagles.tick(now);
   scene.render(session, now / 1000);

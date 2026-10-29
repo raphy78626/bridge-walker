@@ -26,7 +26,12 @@
       </div>
       <div class="centre">
         <p id="status" role="status">Connected</p>
-        <div class="meter" role="img" aria-label="Balance meter. Tilt the phone to stay in the green."><div id="meter-needle"></div></div>
+        <div class="meter-row">
+          <span id="wind-left" class="wind-chip" hidden aria-hidden="true"><svg viewBox="0 0 120 48"><path d="M4 17h68V3l44 21-44 21V31H4z" /></svg></span>
+          <div class="meter" role="img" aria-label="Balance meter. Tilt the phone to stay in the green."><div id="meter-needle"></div></div>
+          <span id="wind-right" class="wind-chip" hidden aria-hidden="true"><svg viewBox="0 0 120 48"><path d="M116 17H48V3L4 24l44 21V31h68z" /></svg></span>
+        </div>
+        <p id="wind-text" class="wind-text" role="status" aria-live="polite"></p>
         <button id="btn-start" class="big" type="button">Start</button>
         <button id="btn-camera" class="view" type="button" aria-label="Change camera view: chase, first person, cinematic.">🎥 VIEW</button>
         <button id="btn-recalibrate" class="link" type="button">Recalibrate</button>
