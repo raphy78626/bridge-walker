@@ -11,7 +11,7 @@
 // match.phase is 'lobby' | 'playing' | 'roundOver' | 'matchOver' in race and windmaster ('playing' includes falling
 // and respawning). In solo it is the session's own phase (lobby, playing, falling, won, gameover) so the existing
 // single-player flow carries over unchanged.
-import { createSession, START_LIVES } from './session.js';
+import { createSession, START_LIVES, LEDGE_CLOCK_START_S } from './session.js';
 import { createControlledWind } from './wind.js';
 import { WIND_MASTER_FALL_POINTS } from './scoring.js';
 import { MODES } from '../shared/protocol.js';
@@ -82,8 +82,8 @@ function createSolo(seed) {
 
 function createRace(seed, winsToWin) {
   const sessions = {
-    1: createSession({ seed, infiniteLives: true }),
-    2: createSession({ seed, infiniteLives: true }),
+    1: createSession({ seed, infiniteLives: true, ledgeClockAfter: LEDGE_CLOCK_START_S }),
+    2: createSession({ seed, infiniteLives: true, ledgeClockAfter: LEDGE_CLOCK_START_S }),
   };
   const both = [sessions[1], sessions[2]];
   const m = { phase: 'lobby', round: 1, result: null, tally: { 1: 0, 2: 0 }, scores: { 1: 0, 2: 0 } };
@@ -164,6 +164,7 @@ function createWindMaster(seed, rounds) {
   let wind = null; // this level's controlled wind: the session builds a fresh one each time a level begins
   const session = createSession({
     seed,
+    ledgeClockAfter: LEDGE_CLOCK_START_S,
     windSource: ({ maxForce }) => (wind = createControlledWind({ maxForce: windMasterForce(maxForce) })),
   });
   const m = { phase: 'lobby', round: 1, result: null, scores: { 1: 0, 2: 0 } };
@@ -173,6 +174,8 @@ function createWindMaster(seed, rounds) {
   let seenFalls = 0;
   const other = (p) => (p === 1 ? 2 : 1);
   const playing = () => m.phase === 'playing' && session.phase === 'playing' && !session.paused;
+  // A gust is booked against the session clock, which stands still while he waits on the ledge: refuse until it runs.
+  const gustable = () => playing() && session.time > 0;
 
   function endRound() {
     const won = session.phase === 'won';
@@ -211,9 +214,10 @@ function createWindMaster(seed, rounds) {
     get result() { return m.result; },
     get scores() { return copy2(m.scores); },
     get paused() { return session.paused; },
-    get gustReady() { return playing() && wind.ready(session.time); },
-    // Seconds until the Wind Master may send another gust (0 when ready or when no round is running).
-    get gustIn() { return playing() ? wind.readyIn(session.time) : 0; },
+    get gustReady() { return gustable() && wind.ready(session.time); },
+    // Seconds until the Wind Master may send another gust: 0 when ready or when no round is running, Infinity while the
+    // walker is still on the ledge (the clock has not started, so there is nothing to count down).
+    get gustIn() { return gustable() ? wind.readyIn(session.time) : playing() ? Infinity : 0; },
     get canChangeMode() { return m.phase !== 'playing'; },
     walkerOf: () => walker,
     windMasterOf: () => other(walker),
@@ -222,7 +226,7 @@ function createWindMaster(seed, rounds) {
     input(player, msg) {
       if (player !== 1 && player !== 2) return false;
       if (msg.t === 'gust') {
-        return player === other(walker) && playing() && wind.trigger(msg.dir, session.time);
+        return player === other(walker) && gustable() && wind.trigger(msg.dir, session.time);
       }
       return player === walker && applyInput(session, msg);
     },

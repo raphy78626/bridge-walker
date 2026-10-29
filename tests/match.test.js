@@ -5,7 +5,7 @@ import { createControlledWind, GUST_COOLDOWN_S, CONTROLLED_GUST_S } from '../src
 import { forecastAt } from '../src/game/forecast.js';
 import { difficulty, MAX_WIND } from '../src/game/difficulty.js';
 import { WIND_MASTER_FALL_POINTS } from '../src/game/scoring.js';
-import { onBridge } from './helpers/onBridge.js';
+import { onBridge, steppedOn } from './helpers/onBridge.js';
 import { START_Z } from '../src/game/session.js';
 
 const DT = 1 / 60;
@@ -271,7 +271,7 @@ describe('race match', () => {
       matchWinner: 0,
     });
     expect(m.result.times[1]).toBeGreaterThan(30);
-    expect(m.result.times[2]).toBe(0); // never stepped onto the bridge, so the clock never started
+    expect(m.result.times[2]).toBeLessThan(m.result.times[1]); // he never stepped on: his clock only started after 4 s on the ledge
     expect(m.tally).toEqual({ 1: 1, 2: 0 });
     expect(m.scores[1]).toBe(m.sessions[1].result.score);
     expect(m.scores[2]).toBe(0);
@@ -428,7 +428,7 @@ describe('windmaster match', () => {
     expect(difficulty(1).maxWind).toBeLessThan(WIND_MASTER_MIN_FORCE);
     const m = wm();
     m.start();
-    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
+    steppedOn(m); // the clock runs, so gusts are accepted
     m.input(2, { t: 'gust', dir: 1 });
     m.update(DT);
     expect(m.sessions[1].forecast.strength).toBeCloseTo(WIND_MASTER_MIN_FORCE / MAX_WIND, 6);
@@ -452,7 +452,7 @@ describe('windmaster match', () => {
     const lean = (dir) => {
       const m = wm();
       m.start();
-      onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
+      steppedOn(m); // the clock runs, so gusts are accepted
       m.input(2, { t: 'gust', dir });
       tick(m, 60 * 3); // no tilt from the walker: the wind alone moves the lean
       return m.sessions[1].walker.leanVel;
@@ -463,7 +463,7 @@ describe('windmaster match', () => {
   it('holds the cooldown: gusts too close together are refused, then allowed', () => {
     const m = wm();
     m.start();
-    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
+    steppedOn(m); // the clock runs, so gusts are accepted
     expect(m.input(2, { t: 'gust', dir: 1 })).toBe(true);
     expect(m.gustReady).toBe(false);
     expect(m.input(2, { t: 'gust', dir: -1 })).toBe(false);
@@ -479,7 +479,7 @@ describe('windmaster match', () => {
   it('ignores gusts from the walker, and walker inputs from the Wind Master', () => {
     const m = wm();
     m.start();
-    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
+    steppedOn(m); // the clock runs, so gusts are accepted
     expect(m.input(1, { t: 'gust', dir: 1 })).toBe(false);
     expect(m.gustReady).toBe(true); // nothing was booked
     expect(m.input(2, { t: 'walk', on: true })).toBe(false);
@@ -551,7 +551,7 @@ describe('windmaster match', () => {
   it('a fall just after a gust ended still counts for the Wind Master', () => {
     const m = wm();
     m.start();
-    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
+    steppedOn(m); // the clock runs, so gusts are accepted
     const s = m.sessions[1];
     m.input(2, { t: 'gust', dir: 1 });
     tick(m, Math.round(60 * (WIND_WARNING_S + CONTROLLED_GUST_S + 0.5)));
@@ -575,7 +575,7 @@ describe('windmaster match', () => {
   it('swaps the roles after a cleared level, scores both players, and starts the walker fresh on the next level', () => {
     const m = wm();
     m.start();
-    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
+    steppedOn(m); // the clock runs, so gusts are accepted
     runUntil(m, () => m.phase !== 'playing', 200, () => drive(m, 1));
     expect(m.phase).toBe('roundOver');
     expect(m.result).toMatchObject({ kind: 'windmaster', round: 1, level: 1, walker: 1, windMaster: 2, outcome: 'won', fallsCaused: 0 });
@@ -585,9 +585,10 @@ describe('windmaster match', () => {
     expect(m.walkerOf()).toBe(2);
     expect(m.windMasterOf()).toBe(1);
     m.start();
-    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
+    steppedOn(m); // the clock runs, so gusts are accepted
     expect(m).toMatchObject({ phase: 'playing', round: 2, level: 2 });
-    expect(m.sessions[1]).toMatchObject({ phase: 'playing', lives: START_LIVES, level: 2, levelFalls: 0, time: 0 });
+    expect(m.sessions[1]).toMatchObject({ phase: 'playing', lives: START_LIVES, level: 2, levelFalls: 0 });
+    expect(m.sessions[1].time).toBeLessThan(0.1);
     expect(m.input(1, { t: 'walk', on: true })).toBe(false); // the old walker is now the Wind Master
     expect(m.input(2, { t: 'walk', on: true })).toBe(true);
     expect(m.input(2, { t: 'gust', dir: 1 })).toBe(false);

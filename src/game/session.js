@@ -14,6 +14,9 @@ const GAP_RESPAWN_BACK = 1.5; // metres before the gap you fell into that you ge
 // Each level starts on the rock ledge before the bridge: solid ground, a safe place to get ready. The level timer
 // (and with it the wind) only starts once he steps onto the bridge.
 export const START_Z = -2.5;
+// In a match (race, Wind Master) a walker who never steps on the bridge would stall the round for ever, so a lane's clock
+// starts after this long on the ledge anyway. Solo has nothing to stall: its clock waits for the bridge.
+export const LEDGE_CLOCK_START_S = 4;
 // On the bridge he has to keep moving. Standing still is fine for IDLE_GRACE seconds; after that the bridge
 // swings him harder and harder (IDLE_PUSH per second, more than a full tilt can hold within a few seconds).
 export const IDLE_GRACE = 2;
@@ -21,9 +24,11 @@ const IDLE_PUSH = 1.2;
 
 // Options (all optional; the defaults are the solo game):
 //   infiniteLives: falls still cost time and count in levelFalls, but lives never run out (race mode).
+//   ledgeClockAfter: seconds on the ledge after which the level clock (and the wind) start even though he has not stepped
+//     onto the bridge. null (solo) waits for the bridge for as long as it takes.
 //   windSource: ({ seed, level, maxForce, gustGapMin, gustGapMax }) => wind, called each time a level begins, in
 //     place of the seeded createWind. The wind needs force(t) and peek(t); windmaster mode passes a controlled wind.
-export function createSession({ seed = 1, infiniteLives = false, windSource = null } = {}) {
+export function createSession({ seed = 1, infiniteLives = false, windSource = null, ledgeClockAfter = null } = {}) {
   let wind = null;
   let instability = 1; // this level's lean-growth multiplier
 
@@ -31,7 +36,8 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
     phase: 'lobby', // lobby | playing | falling | gameover | won
     lives: START_LIVES,
     level: 1,
-    time: 0, // seconds on the bridge this level
+    time: 0, // seconds on the bridge this level (0 while he is still on the ledge, unless ledgeClockAfter ran out)
+    ledgeTime: 0, // seconds spent on the ledge with the clock not yet running
     phaseTime: 0, // seconds since the current phase began
     walker: createWalker(),
     idleTime: 0, // seconds standing still on the bridge; the TV and phone say "keep moving" as it builds
@@ -76,6 +82,7 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
       s.halted = false;
       const d = difficulty(s.level);
       s.time = 0;
+      s.ledgeTime = 0;
       s.levelFalls = 0;
       s.parTime = d.parTime;
       s.result = null;
@@ -97,7 +104,9 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
       s.phaseTime += dt;
       if (s.phase === 'playing') {
         const onBridge = s.walker.z >= 0 && s.walker.z < BRIDGE_LENGTH;
-        if (onBridge || s.time > 0) s.time += dt; // the clock (and the wind) start with the first step on the bridge
+        if (s.time === 0 && !onBridge) s.ledgeTime += dt;
+        // The clock (and the wind) start with the first step on the bridge, or, in a match, when the ledge wait runs out.
+        if (onBridge || s.time > 0 || (ledgeClockAfter != null && s.ledgeTime >= ledgeClockAfter)) s.time += dt;
         const { tilt, walking, running } = s.input;
         const onFeet = (walking || running) && !s.walker.airborne;
         s.idleTime = onBridge && !onFeet && !s.walker.airborne ? s.idleTime + dt : 0;

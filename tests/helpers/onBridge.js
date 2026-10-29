@@ -14,3 +14,11 @@ export function matchToBridge(match) {
 export function onBridge(x) {
   return x && x.sessions ? matchToBridge(x) : toBridge(x);
 }
+
+// onBridge, then one frame, so the level clock is running. A Wind Master gust is refused until it is (it is booked against
+// that clock), so the gust tests start here; everything else about the first plank is the same.
+export function steppedOn(x, dt = 1 / 60) {
+  onBridge(x);
+  x.update(dt);
+  return x;
+}

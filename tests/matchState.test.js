@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createMatch } from '../src/game/match.js';
 import { matchStateFor, roleOf } from '../src/game/matchState.js';
 import { encode, decode } from '../src/shared/protocol.js';
-import { onBridge } from './helpers/onBridge.js';
+import { onBridge, steppedOn } from './helpers/onBridge.js';
 
 const DT = 1 / 60;
 // What the TV's own state message carries (src/tv/stateSync.js), written out so this test does not follow that file.
@@ -35,7 +35,7 @@ describe('matchStateFor', () => {
     const m = createMatch({ mode: 'windmaster', seed: 3 });
     expect([roleOf(m, 1), roleOf(m, 2)]).toEqual(['walker', 'windmaster']);
     m.start();
-    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
+    steppedOn(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(matchStateFor(m, 2)).toMatchObject({ role: 'windmaster', gustReady: true, phase: 'playing', lives: 3 });
     expect(matchStateFor(m, 1)).toMatchObject({ role: 'walker', gustReady: true }); // a walker's phone ignores it
     m.input(2, { t: 'gust', dir: 1 });
