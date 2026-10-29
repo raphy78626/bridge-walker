@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bridge Walker</title>
+    <script>
+      // TVs have no developer tools: send the browser version and any errors to the server log.
+      // Plain ES5 on purpose, so it still reports on browsers where the game itself can't run.
+      (function () {
+        var seen = {}; // identical messages are sent once
+        var seenCount = 0;
+        var sentAt = []; // send times (ms) inside the current 10 s window
+        var dropped = 0;
+        var WINDOW_MS = 10000;
+        var MAX_PER_WINDOW = 10; // a render loop that throws every frame must not flood the server
+
+        function send(msg) {
+          try {
+            var x = new XMLHttpRequest();
+            x.open('POST', '/api/log', true);
+            x.send(msg);
+          } catch (e) {}
+        }
+        function report(kind, text) {
+          var msg = kind + ': ' + String(text).slice(0, 1500);
+          // 'fps' lines repeat on purpose (one per 10 s), so they skip the duplicate check.
+          var dedupe = kind !== 'fps';
+          if (dedupe && seen[msg]) return;
+          var now = new Date().getTime();
+          while (sentAt.length && now - sentAt[0] > WINDOW_MS) sentAt.shift();
+          if (sentAt.length >= MAX_PER_WINDOW) {
+            dropped++;
+            return;
+          }
+          sentAt.push(now);
+          // Marked only once actually sent, so an error dropped by the cap can still be reported later.
+          if (dedupe && seenCount < 500) {
+            seen[msg] = true;
+            seenCount++;
+          }
+          if (dropped) {
+            msg += ' [' + dropped + ' more messages were dropped]';
+            dropped = 0;
+          }
+          send(msg);
+        }
+        function show(v) {
+          if (v && v.stack) return String(v.stack);
+          if (v && typeof v === 'object') {
+            try {
+              return JSON.stringify(v);
+            } catch (e) {}
+          }
+          return String(v);
+        }
+        window.reportToServer = report;
+        report('tv', navigator.userAgent);
+        window.addEventListener('error', function (e) {
+          var src = e.target && (e.target.src || e.target.href);
+          report('error', src ? 'failed to load ' + src : e.message + ' @ ' + e.filename + ':' + e.lineno);
+        }, true);
+        window.addEventListener('unhandledrejection', function (e) {
+          report('error', show(e.reason));
+        });
+        var consoleError = console.error;
+        console.error = function () {
+          var parts = [];
+          for (var i = 0; i < arguments.length; i++) parts.push(show(arguments[i]));
+          report('error', parts.join(' '));
+          consoleError.apply(console, arguments);
+        };
+      })();
+    </script>
+    <link rel="stylesheet" href="/src/tv/tv.css" />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <div class="pill left"><span id="timer">00:00</span><small id="level">Level 1</small></div>
+      <div class="pill right"><span id="dist">0 / 60 m</span><span id="lives">❤ 3</span></div>
+      <div id="balance"><div id="balance-needle"></div></div>
+      <div id="gap-hint" hidden></div>
+      <div id="level-banner" hidden></div>
+      <div id="cam-toast" hidden></div>
+      <div id="message"></div>
+    </div>
+
+    <div id="pairing">
+      <h1>Bridge Walker</h1>
+      <canvas id="qr"></canvas>
+      <p id="pairing-status" hidden>Connecting…</p>
+      <p id="pairing-hint">Scan with your phone (same Wi-Fi)</p>
+      <p class="code" id="pairing-code">Room <b id="room-code">····</b></p>
+      <p class="controls" id="pairing-controls">Tilt to balance · Hold WALK or RUN · Tap JUMP at gaps</p>
+      <p class="credits">
+        Sounds: Kenney, OpenGameArt, Wikimedia Commons. "Screaming Hawk" by PsychoBird (CC BY 3.0); waterfall
+        recordings by Arie m den toom and Antti Leppänen (CC BY 4.0). Soldier by T. Choonyung (Mixamo). Full list: audio/CREDITS.md
+      </p>
+      <p class="url" id="phone-url"></p>
+    </div>
+
+    <script type="module" src="/src/tv/main.js"></script>
+  </body>
+</html>

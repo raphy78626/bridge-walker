@@ -1,0 +1,36 @@
+{
+  "name": "bridge-walker",
+  "version": "0.1.0",
+  "description": "Bridge Walker: balance a soldier across a rope bridge on your LG webOS TV, steering with your phone's tilt. A parent & kid project.",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "dev": "vite",
+    "smoke": "node scripts/smoke-relay.mjs",
+    "build": "vite build",
+    "tv": "vite build && vite preview",
+    "webos:build": "node scripts/build-webos.mjs",
+    "webos:package": "npm run webos:build && ares-package dist-webos -o build-webos",
+    "webos:install": "npm run webos:package && ares-install -d tv build-webos/com.realitybridge.game_0.1.0_all.ipk && ares-launch -d tv com.realitybridge.game",
+    "assets": "node scripts/fetch-assets.mjs",
+    "predev": "node scripts/fetch-assets.mjs",
+    "pretv": "node scripts/fetch-assets.mjs",
+    "prebuild": "node scripts/fetch-assets.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5",
+    "ws": "^8.22.0"
+  }
+}

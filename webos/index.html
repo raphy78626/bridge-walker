@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Bridge Walker</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #120c08;
+        color: #f3e6d6;
+        font-family: sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+      h1 { font-size: 72px; margin: 0 0 28px; letter-spacing: 2px; }
+      p { font-size: 30px; opacity: 0.85; max-width: 1300px; margin: 12px auto; }
+      #manual[hidden] { display: none; }
+      input, button { font-size: 36px; padding: 14px 22px; border-radius: 12px; border: 2px solid #f3e6d6; }
+      input { width: 520px; background: #241a12; color: #f3e6d6; text-align: center; }
+      button { background: #2fb67c; color: #fff; border-color: #2fb67c; margin-left: 12px; }
+      input:focus, button:focus { outline: 4px solid #ffd27a; }
+    </style>
+  </head>
+  <body>
+    <div>
+      <h1>Bridge Walker</h1>
+      <p id="msg">Looking for the game computer…</p>
+      <div id="manual" hidden>
+        <p>Run <b>npm run tv</b> on a computer on this Wi-Fi, then type the address it shows for the TV page:</p>
+        <input id="addr" type="text" inputmode="decimal" value="192.168." aria-label="Game computer address" />
+        <button id="go" type="button">Connect</button>
+      </div>
+    </div>
+    <script>
+      // Hosted app: the game and the phone relay run on a computer on the same Wi-Fi (`npm run tv`), which serves
+      // the TV page over plain HTTP on port 5184. This page finds that computer, remembers it, then hands over.
+      // Order: the last server that worked, the build machine's address (a hint), a scan of common home networks,
+      // and finally an address typed with the remote. Plain ES5: it is the first thing the TV runs.
+      var PORT = 5184;
+      var KEY = 'bridge.server';
+      var HINT = '__GAME_URL__'.replace(/^__.*__$/, ''); // filled in by scripts/build-webos.mjs, or empty
+      var msg = document.getElementById('msg');
+
+      function serverOf(address) {
+        var a = address.replace(/^\s+|\s+$/g, '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+        if (!a) return '';
+        return 'http://' + (/:\d+$/.test(a) ? a : a + ':' + PORT);
+      }
+
+      // A real Bridge Walker server answers /api/info with { host, port }.
+      function probe(server, timeout, done) {
+        var x = new XMLHttpRequest();
+        var finished = false;
+        function end(ok) { if (!finished) { finished = true; done(ok); } }
+        try {
+          x.open('GET', server + '/api/info', true);
+          x.timeout = timeout;
+          x.onload = function () {
+            try { end(x.status === 200 && typeof JSON.parse(x.responseText).port === 'number'); } catch (e) { end(false); }
+          };
+          x.onerror = x.ontimeout = function () { end(false); };
+          x.send();
+        } catch (e) { end(false); }
+      }
+
+      function open(server) {
+        try { localStorage.setItem(KEY, server); } catch (e) {}
+        msg.textContent = 'Found the game at ' + server.replace('http://', '') + ' — starting…';
+        location.replace(server + '/tv.html');
+      }
+
+      // Probe a list of servers, `batch` at a time; calls found(server) on the first hit, or none() at the end.
+      function scan(servers, batch, timeout, found, none) {
+        var next = 0;
+        var hit = false;
+        function round() {
+          if (hit) return;
+          if (next >= servers.length) { none(); return; }
+          var group = servers.slice(next, next + batch);
+          next += batch;
+          var left = group.length;
+          msg.textContent = 'Looking for the game computer on your Wi-Fi… (' + group[0].replace(/^http:\/\/|\.\d+:\d+$/g, '') + '.x)';
+          for (var i = 0; i < group.length; i++) {
+            (function (s) {
+              probe(s, timeout, function (ok) {
+                if (ok && !hit) { hit = true; found(s); return; }
+                if (--left === 0) round();
+              });
+            })(group[i]);
+          }
+        }
+        round();
+      }
+
+      function subnetServers(prefixes) {
+        var list = [];
+        for (var p = 0; p < prefixes.length; p++) for (var h = 1; h < 255; h++) list.push('http://' + prefixes[p] + '.' + h + ':' + PORT);
+        return list;
+      }
+
+      function showManual(note) {
+        msg.textContent = note;
+        document.getElementById('manual').hidden = false;
+        var input = document.getElementById('addr');
+        input.focus();
+        function connect() {
+          var s = serverOf(input.value);
+          if (!s) return;
+          msg.textContent = 'Trying ' + s.replace('http://', '') + '…';
+          probe(s, 4000, function (ok) {
+            if (ok) open(s);
+            else msg.textContent = 'No game at ' + s.replace('http://', '') + '. Check the address and that npm run tv is running.';
+          });
+        }
+        document.getElementById('go').onclick = connect;
+        input.onkeydown = function (e) { if (e.keyCode === 13) connect(); };
+      }
+
+      // A webOS app can ask the TV's connection manager for its own address, which a web page can't. Scanning only
+      // the TV's own /24 matters: on the LG TV, probing a range that isn't on this network leaves hundreds of
+      // connections hanging until the browser runs out, and then even the real server stops answering.
+      var bridge; // kept alive until it answers
+      function tvSubnets(done) {
+        var replied = false;
+        function finish(nets) { if (!replied) { replied = true; done(nets); } }
+        try {
+          bridge = new PalmServiceBridge();
+          bridge.onservicecallback = function (reply) {
+            var nets = [];
+            try {
+              var s = JSON.parse(reply);
+              var links = [s.wired, s.wifi];
+              for (var i = 0; i < links.length; i++) {
+                if (links[i] && links[i].state === 'connected' && links[i].ipAddress) nets.push(links[i].ipAddress.replace(/\.\d+$/, ''));
+              }
+            } catch (e) {}
+            finish(nets);
+          };
+          bridge.call('luna://com.webos.service.connectionmanager/getStatus', '{}');
+          setTimeout(function () { finish([]); }, 3000);
+        } catch (e) { finish([]); } // not on webOS (e.g. testing in a desktop browser)
+      }
+
+      function search() {
+        var saved = '';
+        try { saved = localStorage.getItem(KEY) || ''; } catch (e) {}
+        var known = [saved, serverOf(HINT)].filter(function (s, i, a) { return s && a.indexOf(s) === i; });
+        scan(known, 2, 3000, open, function () {
+          tvSubnets(function (nets) {
+            if (!nets.length) {
+              // Unknown network: fall back to the guesses' subnet, else the most common home range.
+              var m = /^http:\/\/(\d+\.\d+\.\d+)\.\d+:/.exec(known[0] || '');
+              nets = [m ? m[1] : '192.168.1'];
+            }
+            scan(subnetServers(nets), 48, 1200, open, function () {
+              showManual('Couldn’t find the game computer automatically. Is npm run tv running on this Wi-Fi?');
+            });
+          });
+        });
+      }
+
+      search();
+    </script>
+  </body>
+</html>

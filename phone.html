@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Bridge Walker – Controller</title>
+    <link rel="stylesheet" href="/src/phone/phone.css" />
+  </head>
+  <body>
+    <section id="screen-connect" class="screen">
+      <h1>Bridge Walker</h1>
+      <p id="room-label"></p>
+      <button id="btn-connect" class="big">Connect</button>
+      <p id="connect-error" class="error"></p>
+    </section>
+
+    <section id="screen-calibrate" class="screen" hidden>
+      <p id="calib-text"></p>
+      <button id="btn-calib" class="big"></button>
+    </section>
+
+    <section id="screen-play" class="screen play" hidden>
+      <div class="pad pad-left">
+        <button id="btn-walk" class="ctl walk" type="button" aria-label="Walk. Press and hold to walk.">WALK</button>
+        <button id="btn-run" class="ctl run" type="button" aria-label="Run. Press and hold to run fast.">RUN</button>
+      </div>
+      <div class="centre">
+        <p id="status" role="status">Connected</p>
+        <div class="meter" role="img" aria-label="Balance meter. Tilt the phone to stay in the green."><div id="meter-needle"></div></div>
+        <button id="btn-start" class="big" type="button">Start</button>
+        <button id="btn-camera" class="view" type="button" aria-label="Change camera view: chase, first person, cinematic.">🎥 VIEW</button>
+        <button id="btn-recalibrate" class="link" type="button">Recalibrate</button>
+      </div>
+      <div class="pad pad-right">
+        <button id="btn-jump" class="ctl jump" type="button" aria-label="Jump. Tap to jump over a gap.">JUMP</button>
+      </div>
+    </section>
+
+    <script type="module" src="/src/phone/main.js"></script>
+  </body>
+</html>

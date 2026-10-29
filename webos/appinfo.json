@@ -1,0 +1,14 @@
+{
+  "id": "com.realitybridge.game",
+  "version": "0.1.0",
+  "vendor": "Bridge Walker",
+  "type": "web",
+  "main": "index.html",
+  "title": "Bridge Walker",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "resolution": "1280x720",
+  "bgColor": "#120c08",
+  "iconColor": "#120c08",
+  "requiredACG": []
+}

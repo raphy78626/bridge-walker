@@ -1,0 +1,126 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+}
+#game { display: block; width: 100vw; height: 100vh; }
+#hud { position: fixed; inset: 0; pointer-events: none; }
+.pill {
+  position: absolute;
+  top: 4vh;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 22px;
+  border-radius: 14px;
+  background: rgba(10, 14, 20, 0.6);
+  font-size: 3.2vh;
+  font-weight: 600;
+}
+.pill.left { left: 4vw; }
+.pill.right { right: 4vw; text-align: right; }
+.pill small { font-size: 2vh; opacity: 0.8; }
+#balance {
+  position: absolute;
+  bottom: 7vh;
+  left: 30vw;
+  width: 40vw;
+  height: 1.6vh;
+  border-radius: 1vh;
+  background: linear-gradient(90deg, #e2504a, #2fb67c 35%, #2fb67c 65%, #e2504a);
+  opacity: 0.85;
+}
+#balance.danger { box-shadow: 0 0 2vh #ff4a3d; }
+#balance-needle {
+  position: absolute;
+  top: -1vh;
+  left: 50%;
+  width: 0.8vh;
+  height: 3.6vh;
+  margin-left: -0.4vh;
+  border-radius: 0.4vh;
+  background: #fff;
+}
+#message {
+  position: absolute;
+  top: 40vh;
+  width: 100%;
+  text-align: center;
+  font-size: 6vh;
+  font-weight: 800;
+  text-shadow: 0 0.4vh 1.5vh rgba(0, 0, 0, 0.7);
+}
+#gap-hint {
+  position: absolute;
+  top: 17vh;
+  left: 0;
+  right: 0;
+  margin: 0 auto; /* centred without a transform, which the pulse animates */
+  width: max-content;
+  padding: 1.4vh 3vh;
+  border-radius: 1.6vh;
+  background: rgba(214, 62, 38, 0.92);
+  box-shadow: 0 0 3vh rgba(255, 120, 60, 0.7);
+  text-align: center;
+  font-size: 4.2vh;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0.3vh 1vh rgba(0, 0, 0, 0.5);
+  animation: gap-pulse 0.5s ease-in-out infinite alternate;
+}
+#gap-hint[hidden] { display: none; }
+@keyframes gap-pulse {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(1.07); opacity: 0.8; }
+}
+#level-banner {
+  position: absolute;
+  top: 6vh; /* clear of the GAP AHEAD hint at 17vh, which can show at the same moment */
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 5.4vh;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0.4vh 1.8vh rgba(0, 0, 0, 0.75);
+  animation: banner-in 0.5s ease-out;
+}
+#cam-toast {
+  position: absolute;
+  bottom: 14vh;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: max-content;
+  padding: 1vh 2.6vh;
+  border-radius: 1.4vh;
+  background: rgba(10, 14, 20, 0.6);
+  font-size: 3vh;
+  font-weight: 700;
+  animation: banner-in 0.25s ease-out;
+}
+#level-banner[hidden], #cam-toast[hidden] { display: none; }
+@keyframes banner-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+#pairing {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5vh;
+  background: rgba(8, 12, 18, 0.88);
+  font-size: 2.6vh;
+}
+#pairing[hidden] { display: none; }
+#pairing .code b { letter-spacing: 0.4em; font-size: 5vh; }
+#pairing .controls { font-size: 2.4vh; font-weight: 600; margin: 0.5vh 0 0; }
+#pairing .url { opacity: 0.6; font-size: 2vh; }
+#pairing .credits { opacity: 0.45; font-size: 1.4vh; max-width: 70vw; text-align: center; }
+#qr { background: #fff; border-radius: 12px; }
