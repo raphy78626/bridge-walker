@@ -49,16 +49,17 @@ export function roundResultText(msg, me = 1) {
     return [head, tallyText(r.tally, you)].filter(Boolean).join(' · ');
   }
   if (r.kind === 'windmaster') {
-    const wm = r.windMaster === you;
+    const total = r.scores && Number.isFinite(r.scores[you]) ? `Total ${formatScore(r.scores[you])}` : '';
+    if (msg.phase === 'matchOver') { // the final line is short: the match, then the score
+      const head = r.matchWinner ? (r.matchWinner === you ? 'You won the match!' : `P${r.matchWinner} won the match`) : 'Match drawn';
+      return [head, total].filter(Boolean).join(' · ');
+    }
     const points = r.roundScores && Number.isFinite(r.roundScores[you]) ? r.roundScores[you] : 0;
     const falls = Number.isFinite(r.fallsCaused) ? r.fallsCaused : 0;
-    const head = wm
+    const head = r.windMaster === you
       ? `${falls} fall${falls === 1 ? '' : 's'} caused`
       : r.outcome === 'won' ? 'You made it!' : 'Game over';
-    const tail = `${points >= 0 ? '+' : ''}${formatScore(points)} pts`;
-    const total = r.scores && Number.isFinite(r.scores[you]) ? ` · Total ${formatScore(r.scores[you])}` : '';
-    const end = r.matchWinner ? (r.matchWinner === you ? ' · You won the match!' : ` · P${r.matchWinner} won the match`) : '';
-    return `${head} · ${tail}${total}${end}`;
+    return [head, `${points >= 0 ? '+' : ''}${formatScore(points)} pts`, total].filter(Boolean).join(' · ');
   }
   return '';
 }

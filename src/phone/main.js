@@ -149,10 +149,10 @@ function showRole(view) {
   $('btn-gust-left').classList.toggle('cooling', !ready);
   $('btn-gust-right').classList.toggle('cooling', !ready);
   const cool = $('gust-cool');
+  cool.hidden = view.idle; // between rounds there is nothing to count down, and the room is needed for Start
   if (view.idle) {
     cool.classList.remove('cooling');
     cool.classList.add('ready');
-    $('gust-state').textContent = 'GUSTS START WITH THE ROUND';
     wasReady = true;
     return;
   }

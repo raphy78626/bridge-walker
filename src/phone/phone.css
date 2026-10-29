@@ -188,6 +188,14 @@ html, body {
 @keyframes gust-ring { from { stroke-dashoffset: 94.25; } to { stroke-dashoffset: 0; } }
 .play.windmaster .meter { visibility: hidden; }
 
+/* A short landscape phone (iPhone SE and mini, 375 px tall): the centre column stacks status, picker, Start, VIEW and Sound. */
+@media (max-height: 420px) and (orientation: landscape) {
+  .centre { gap: 6px; }
+  .centre .big { padding: 8px 24px; font-size: 1.05rem; }
+  .view { padding: 6px 16px; font-size: 0.9rem; }
+  .mode { padding: 5px 10px; font-size: 0.8rem; }
+}
+
 /* Held upright by mistake: controls on top, thumbs side by side underneath. */
 @media (orientation: portrait) {
   .play { grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; }

@@ -62,6 +62,13 @@ describe('statusText, two players', () => {
     expect(statusText({ mode: 'windmaster', you: 2, role: 'walker', phase: 'roundOver', result: wm })).toBe('1 fall caused · +150 pts · Total 150');
   });
 
+  it('windmaster match end: the winner and the total only', () => {
+    const r = { kind: 'windmaster', walker: 2, windMaster: 1, outcome: 'gameover', fallsCaused: 3, roundScores: { 1: 450, 2: 0 }, scores: { 1: 1450, 2: 1240 }, matchWinner: 1 };
+    expect(statusText({ mode: 'windmaster', you: 1, phase: 'matchOver', result: r })).toBe('You won the match! · Total 1,450');
+    expect(statusText({ mode: 'windmaster', you: 2, phase: 'matchOver', result: r })).toBe('P1 won the match · Total 1,240');
+    expect(statusText({ mode: 'windmaster', you: 2, phase: 'matchOver', result: { ...r, matchWinner: 0 } })).toBe('Match drawn · Total 1,240');
+  });
+
   it('falls back to a plain line when a result is missing', () => {
     expect(statusText({ mode: 'race', you: 1, phase: 'roundOver' })).toBe('Round over — press Next round');
     expect(statusText({ mode: 'windmaster', you: 1, phase: 'matchOver', result: { kind: 'bogus' } })).toBe('Match over — press New match');
