@@ -17,6 +17,27 @@ export function roleOf(match, player) {
   return 'walker';
 }
 
+const round2 = (n) => Math.round(n * 100) / 100;
+const round2Pair = (o) => ({ 1: round2(o[1]), 2: round2(o[2]) });
+
+// The round's result as the phone gets it. match.result is the TV's, with everything its results panel needs; the phone reads
+// only who won, the tally and scores, and (windmaster) who walked, the outcome and the points. What the message already
+// says elsewhere (round, level, the lane's stars and score) and the walker's whole level result are left out, and times are
+// rounded to 2 decimals: the relay closes a socket over MAX_MESSAGE_BYTES (see tests/stateSize.test.js).
+export function resultForPhone(r) {
+  if (!r || typeof r !== 'object') return r;
+  if (r.kind === 'race') {
+    return { kind: 'race', winner: r.winner, matchWinner: r.matchWinner, tally: r.tally, scores: r.scores, times: round2Pair(r.times), finished: r.finished };
+  }
+  if (r.kind === 'windmaster') {
+    return {
+      kind: 'windmaster', walker: r.walker, windMaster: r.windMaster, outcome: r.outcome, fallsCaused: r.fallsCaused,
+      roundScores: r.roundScores, scores: r.scores, matchWinner: r.matchWinner,
+    };
+  }
+  return r;
+}
+
 export function matchStateFor(match, player) {
   const msg = { mode: match.mode, you: player, role: roleOf(match, player), gustReady: !!match.gustReady, canChangeMode: !!match.canChangeMode };
   if (!MODES.includes(match.mode) || match.mode === 'solo') return msg;
@@ -31,6 +52,6 @@ export function matchStateFor(match, player) {
   } else {
     msg.lives = session.lives;
   }
-  if (match.result) msg.result = match.result;
+  if (match.result) msg.result = resultForPhone(match.result);
   return msg;
 }

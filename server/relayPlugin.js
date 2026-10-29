@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { isIP } from 'node:net';
 import { WebSocketServer } from 'ws';
-import { decode } from '../src/shared/protocol.js';
+import { decode, MAX_MESSAGE_BYTES } from '../src/shared/protocol.js';
 import { createRooms } from './rooms.js';
 import { lanIp } from './lanIp.js';
 
@@ -120,7 +120,7 @@ export function attachRelay(server, port, { tvPort = port + TV_PORT_OFFSET, hear
   if (!server.httpServer) return null; // vitest / middleware mode
 
   const rooms = createRooms();
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 }); // messages are tiny JSON
+  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES }); // messages are tiny JSON
   const makeOnUpgrade = (isTv) => (req, socket, head) => {
     if (req.url !== '/ws') {
       if (isTv) socket.destroy(); // nothing else upgrades here; don't leave it hanging

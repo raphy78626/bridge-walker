@@ -13,7 +13,16 @@ export const sessionFor = (match, player) => (match.mode === 'race' ? match.sess
 
 // What the TV sends one phone: its session's state, with the match's fields over it, aimed at that phone alone.
 // Solo adds only mode, you, role and gustReady, so the single-player message is the old one plus those.
-export const stateMessageFor = (match, player) => ({ ...buildStateMessage(sessionFor(match, player)), ...matchStateFor(match, player), to: player });
+// In a match the lane session's own stars and score mean nothing to the phone (the round's result says who won), so they are left out.
+export function stateMessageFor(match, player) {
+  const msg = { ...buildStateMessage(sessionFor(match, player)), ...matchStateFor(match, player), to: player };
+  if (match.mode !== 'solo') {
+    delete msg.stars;
+    delete msg.score;
+    delete msg.runScore;
+  }
+  return msg;
+}
 
 function resultFields(session) {
   const r = session && session.result;

@@ -8,6 +8,9 @@
 export const PHONE_TYPES = new Set(['tilt', 'walk', 'run', 'jump', 'camera', 'pause', 'volume', 'start', 'gust', 'mode']);
 export const TV_TYPES = new Set(['state']);
 export const RELAYED = new Set([...PHONE_TYPES, ...TV_TYPES]);
+// The relay closes a socket whose message is bigger than this (the WebSocket server's maxPayload). The TV's state messages are
+// the biggest; tests/stateSize.test.js keeps them well under it.
+export const MAX_MESSAGE_BYTES = 1024;
 export const MODES = ['solo', 'race', 'windmaster'];
 const unit = (v) => Math.max(0, Math.min(1, v));
 const SERVER_TYPES = new Set(['room', 'paired', 'peer-left', 'error']);
