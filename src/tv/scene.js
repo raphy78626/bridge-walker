@@ -115,6 +115,7 @@ export function createScene(canvas) {
   let rig = null; // set once the Soldier model has loaded
   loadSoldier(walker, (r) => (rig = r));
   let lastT = null;
+  let gameT = 0; // the scene's own clock: it advances by dt, which is 0 while paused, so nothing that moves with it keeps going
 
   function resize() {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -150,13 +151,14 @@ export function createScene(canvas) {
       const z = -w.z;
       const dt = lastT === null || s.paused ? 0 : Math.min(Math.max(t - lastT, 0), 0.05); // paused: the soldier, streaks and sway hold still
       lastT = t;
+      gameT += dt;
       const gaps = s.gaps ?? NO_GAPS;
       if (gaps !== gapsApplied) {
         gapsApplied = gaps;
         env.setGaps(gaps);
       }
       sun.position.set(sunOffset.x, sunOffset.y, z + sunOffset.z); // shadow box follows the walker
-      env.update(t, camera);
+      env.update(gameT, camera); // clouds, water, birds and the cloth/rope ripple (uWindTime) all stand still in a pause
       // Wind: ease toward what the forecast asks for, then hand it to the ropes and the streaks (no allocation here).
       const f = forecastOf(s);
       const calm = f === CALM || f.state === 'calm';
@@ -175,7 +177,7 @@ export function createScene(canvas) {
       const speed = playing ? w.speed ?? (s.input.walking ? WALK_SPEED : 0) : 0;
       const airborne = playing && !!w.airborne;
       if (speed > WALK_ABOVE && !rig && !airborne) {
-        walker.position.y = lift + 0.06 * Math.abs(Math.sin(t * 9)); // footstep bob (the real clip moves the body itself)
+        walker.position.y = lift + 0.06 * Math.abs(Math.sin(gameT * 9)); // footstep bob (the real clip moves the body itself)
       }
       if (rig) {
         rig.update({ speed, falling, airborne, vy: w.vy ?? 0, fallTime: s.phaseTime }, dt);
@@ -219,8 +221,8 @@ export function createScene(canvas) {
         if (!falling && windSwayNow * windSwayNow > 0.25) {
           // a strong gust buffets the chase camera a little: tiny, and only above half strength
           const shake = (Math.abs(windSwayNow) - 0.5) * 0.06;
-          camera.position.x += Math.sin(t * 37) * shake;
-          camera.position.y += Math.sin(t * 29 + 1) * shake * 0.6;
+          camera.position.x += Math.sin(gameT * 37) * shake;
+          camera.position.y += Math.sin(gameT * 29 + 1) * shake * 0.6;
         }
         if (falling) {
           camera.lookAt(walker.position.x, walker.position.y + 1, z - 1); // watch him drop into the clouds
