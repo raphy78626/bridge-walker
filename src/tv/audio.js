@@ -8,6 +8,7 @@
 // the next theme in the background; buffers that neither the current nor the next theme needs are dropped.
 
 import { THEMES } from './themes.js';
+import { WIND_WARNING_S } from './windFx.js';
 
 export const AUDIO_FILES = {
   ambienceWater: 'ambience_water.ogg',
@@ -103,6 +104,7 @@ const RESIDENT = new Set(ALL_AUDIO_FILES.filter((f) => f !== AUDIO_FILES.ambienc
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 // Waterfall and wind sit quietly under the action: the player found 1.0 too loud on the TV (~-10 dB now).
 export const AMBIENCE_LEVEL = 0.3;
+export const GUST_LEVEL = 0.3; // peak gain of a full-strength gust's whoosh: about twice the ambience bed, then gone
 const withSlash = (base) => (base ? (base.endsWith('/') ? base : base + '/') : '/');
 
 export function createAudio({
@@ -496,6 +498,47 @@ export function createAudio({
     src.stop(t + 0.5);
   }
 
+  // A gust of wind, about 3 s: band-passed noise that swells through the warning, peaks as the gust arrives and dies
+  // away. Moderate on purpose (the ambience was too loud once). o = { dir, strength }: dir +1 blows toward screen
+  // right, so the sound starts at the left (where the wind comes from) and drifts across the way it blows.
+  function gust(o = {}) {
+    ensureContext();
+    if (!running()) return;
+    const dir = o.dir > 0 ? 1 : o.dir < 0 ? -1 : 0;
+    const strength = clamp(Number.isFinite(o.strength) ? o.strength : 0.6, 0, 1);
+    const peak = GUST_LEVEL * (0.55 + 0.45 * strength);
+    const t = ctx.currentTime;
+    const arrive = WIND_WARNING_S; // the gust itself arrives this long after the warning starts
+    const end = arrive + 1.1;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer();
+    src.loop = true; // the buffer is 1.5 s
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 0.8;
+    bp.frequency.setValueAtTime(260, t);
+    bp.frequency.exponentialRampToValueAtTime(820, t + arrive);
+    bp.frequency.exponentialRampToValueAtTime(380, t + end);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak * 0.3, t + arrive * 0.5);
+    g.gain.linearRampToValueAtTime(peak, t + arrive);
+    g.gain.exponentialRampToValueAtTime(0.001, t + end);
+    src.connect(bp);
+    bp.connect(g);
+    let out = g;
+    if (ctx.createStereoPanner) {
+      const p = ctx.createStereoPanner();
+      p.pan.setValueAtTime(-dir * 0.75, t);
+      p.pan.linearRampToValueAtTime(dir * 0.35, t + end);
+      g.connect(p);
+      out = p;
+    }
+    out.connect(sfx);
+    src.start(t, random() * 0.5);
+    src.stop(t + end + 0.05);
+  }
+
   function jump() {
     ensureContext();
     if (!running()) return;
@@ -754,6 +797,7 @@ export function createAudio({
     jump: safe('jump', jump),
     land: safe('land', land),
     fallScream: safe('fallScream', fallScream),
+    gust: safe('gust', gust),
     eagle: safe('eagle', eagle),
     ambientCall: safe('ambientCall', ambientCall),
     setTheme: safe('setTheme', setTheme),

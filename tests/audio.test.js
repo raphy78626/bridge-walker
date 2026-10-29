@@ -8,6 +8,7 @@ import {
   THEME_SOUNDS,
   THEME_CROSSFADE_S,
   AMBIENCE_LEVEL,
+  GUST_LEVEL,
 } from '../src/tv/audio.js';
 import { THEMES } from '../src/tv/themes.js';
 
@@ -130,6 +131,7 @@ describe('createAudio without Web Audio', () => {
     audio.jump();
     audio.land();
     audio.fallScream();
+    audio.gust({ dir: 1, strength: 1 });
     audio.eagle();
     audio.setMasterVolume(0.5);
     expect(warn).toHaveBeenCalledTimes(1);
@@ -272,6 +274,41 @@ describe('one-shots', () => {
     log.sources.length = 0;
     audio.eagle({ pan: -0.5 });
     expect(log.sources.length).toBe(1);
+  });
+
+  it('plays one looping noise whoosh per gust, stops it, and never throws', async () => {
+    const { audio, log } = setup();
+    await audio.unlock();
+    await audio.preload();
+    log.sources.length = 0;
+    audio.gust({ dir: 1, strength: 0.8 });
+    expect(log.sources.length).toBe(1);
+    expect(log.sources[0].started).toBe(true);
+    expect(log.sources[0].loop).toBe(true); // the noise buffer is shorter than the gust
+    expect(log.sources[0].stopped).toBe(true); // scheduled to end by itself
+    audio.gust({ dir: -1, strength: 0.2 });
+    audio.gust({ dir: 0 });
+    audio.gust();
+    audio.gust({ dir: 1, strength: NaN });
+    expect(log.sources.length).toBe(5);
+  });
+
+  it('keeps the gust whoosh moderate, and quieter for a weaker gust', async () => {
+    const peak = async (o) => {
+      const { audio, log } = setup();
+      await audio.unlock();
+      await audio.preload();
+      const before = log.gains.length;
+      audio.gust(o);
+      const env = log.gains[before + 0]; // the gust's own gain is the first one created by it
+      return Math.max(...env.gain.ramps.map(([v]) => v));
+    };
+    const strong = await peak({ dir: 1, strength: 1 });
+    const weak = await peak({ dir: 1, strength: 0.2 });
+    expect(strong).toBeLessThanOrEqual(GUST_LEVEL);
+    expect(strong).toBeLessThanOrEqual(0.35);
+    expect(weak).toBeLessThan(strong);
+    expect(weak).toBeGreaterThan(0);
   });
 
   it('plays nothing while the context is suspended, then works after unlock()', async () => {
