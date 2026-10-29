@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createSession } from '../src/game/session.js';
+import { createSession, BRIDGE_LENGTH } from '../src/game/session.js';
 
 const DT = 1 / 60;
 const run = (s, seconds) => {
@@ -47,6 +47,34 @@ describe('pause', () => {
     expect(s.paused).toBe(true);
     s.togglePause();
     expect(s.paused).toBe(false);
+  });
+
+  it('togglePause is a no-op while falling, and after a win or game over', () => {
+    const run = (s, phase) => {
+      for (let t = 0; t < 300 && s.phase !== phase; t += DT) s.update(DT);
+      return s.phase;
+    };
+    const falling = createSession({ seed: 5 });
+    falling.start();
+    expect(run(falling, 'falling')).toBe('falling'); // idle until a gust knocks him off
+    falling.togglePause();
+    expect(falling.paused).toBe(false);
+    expect(falling.phase).toBe('falling');
+
+    const won = createSession({ seed: 5 });
+    won.start();
+    won.walker = { ...won.walker, z: BRIDGE_LENGTH - 0.05, y: 0, vy: 0, airborne: false };
+    won.input.walking = true;
+    expect(run(won, 'won')).toBe('won');
+    won.togglePause();
+    expect(won.paused).toBe(false);
+    expect(won.phase).toBe('won');
+
+    const over = createSession({ seed: 5 });
+    over.start();
+    expect(run(over, 'gameover')).toBe('gameover');
+    over.togglePause();
+    expect(over.paused).toBe(false);
   });
 
   it('drops a jump pressed while paused', () => {
