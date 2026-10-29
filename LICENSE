@@ -19,9 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This licence covers the source code. The sounds, textures and 3D model have
-their own licences (CC0, public domain, CC BY, and Mixamo's terms), listed in
-public/audio/CREDITS.md, public/textures/CREDITS.md and public/models/CREDITS.md.
