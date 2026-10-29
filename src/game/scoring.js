@@ -6,3 +6,6 @@ export function scoreLevel({ level, time, falls, parTime }) {
   const score = Math.max(100, 500 + 100 * level + timeBonus + clean);
   return { stars, score };
 }
+
+// The Wind Master's points for each fall their gusts cause (windmaster mode).
+export const WIND_MASTER_FALL_POINTS = 150;

@@ -12,7 +12,11 @@ export const START_LIVES = 3;
 export const FALL_DURATION = 2.5; // seconds the fall animation plays before respawn
 const GAP_RESPAWN_BACK = 1.5; // metres before the gap you fell into that you get put back
 
-export function createSession({ seed = 1 } = {}) {
+// Options (all optional; the defaults are the solo game):
+//   infiniteLives: falls still cost time and count in levelFalls, but lives never run out (race mode).
+//   windSource: ({ seed, level, maxForce, gustGapMin, gustGapMax }) => wind, called each time a level begins, in
+//     place of the seeded createWind. The wind needs force(t) and peek(t); windmaster mode passes a controlled wind.
+export function createSession({ seed = 1, infiniteLives = false, windSource = null } = {}) {
   let wind = null;
   let instability = 1; // this level's lean-growth multiplier
 
@@ -34,19 +38,31 @@ export function createSession({ seed = 1 } = {}) {
     // jump is a one-shot: the TV sets it true, the next update() consumes it.
     input: { tilt: 0, walking: false, running: false, jump: false },
     paused: false, // the phone's pause button; only during play, and it freezes everything (timer, wind, walker)
+    halted: false, // a round that ended for someone else (the race loser): frozen where it stands until start()
 
     togglePause() {
       if (s.phase === 'playing') s.paused = !s.paused;
     },
 
-    start() {
-      if (s.phase === 'playing' || s.phase === 'falling') return;
+    // Freezes a level in progress where it stands (the race loser). start() brings it back.
+    halt() {
+      if (s.phase === 'playing' || s.phase === 'falling') s.halted = true;
+    },
+
+    // opts (used by the match, which decides the level and the lives): { level, lives, runScore } override what
+    // the phase would have done. Without opts this is the solo game: next level after a win, level 1 after game over.
+    start({ level, lives, runScore } = {}) {
+      if ((s.phase === 'playing' || s.phase === 'falling') && !s.halted) return;
       if (s.phase === 'won') s.level += 1;
       if (s.phase === 'gameover') {
         s.level = 1;
         s.lives = START_LIVES;
         s.runScore = 0;
       }
+      if (level != null) s.level = level;
+      if (lives != null) s.lives = lives;
+      if (runScore != null) s.runScore = runScore;
+      s.halted = false;
       const d = difficulty(s.level);
       s.time = 0;
       s.levelFalls = 0;
@@ -57,14 +73,15 @@ export function createSession({ seed = 1 } = {}) {
       s.walker = createWalker();
       s.gaps = generateGaps(seed, s.level, BRIDGE_LENGTH);
       s.fallCause = null;
-      wind = createWind({ seed: seed + s.level, maxForce: d.maxWind, gustGapMin: d.gustGapMin, gustGapMax: d.gustGapMax });
+      const windParams = { seed: seed + s.level, maxForce: d.maxWind, gustGapMin: d.gustGapMin, gustGapMax: d.gustGapMax };
+      wind = windSource ? windSource({ ...windParams, level: s.level }) : createWind(windParams);
       enter('playing');
     },
 
     update(dt) {
       const jump = s.input.jump;
       s.input.jump = false; // consumed whether or not a jump could happen
-      if (s.paused) return;
+      if (s.paused || s.halted) return;
       s.phaseTime += dt;
       if (s.phase === 'playing') {
         s.time += dt;
@@ -91,7 +108,7 @@ export function createSession({ seed = 1 } = {}) {
           s.forecast = forecastAt(wind, s.time);
         }
       } else if (s.phase === 'falling' && s.phaseTime >= FALL_DURATION) {
-        if (s.lives > 0) {
+        if (s.lives > 0 || infiniteLives) {
           s.walker = { ...createWalker(), z: respawnZ() };
           s.fallCause = null;
           enter('playing');
@@ -111,7 +128,7 @@ export function createSession({ seed = 1 } = {}) {
   }
 
   function loseLife(cause) {
-    s.lives -= 1;
+    if (!infiniteLives) s.lives -= 1;
     s.levelFalls += 1;
     s.fallCause = cause;
     enter('falling');
