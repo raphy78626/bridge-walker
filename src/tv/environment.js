@@ -1,32 +1,35 @@
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BRIDGE_LENGTH } from '../game/session.js';
 import { mulberry32 } from '../game/rng.js';
 import { applyWindSway, createWindUniforms } from './windSway.js';
-import { STREAK_KINDS, bandHardness, bandTone, crackMask, crossSection, crown, envelope, sstep, streakAt, styleSpec, tierIndex, undercut, warpT } from './rockStyle.js';
+import { sstep } from './rockStyle.js';
+import { CLASSIC_SEED, TEX_M, fbm, noise, rockSurface } from './canyon.js';
+import { createCanyonBuilder, geometryFrom } from './canyonBuild.js';
 
 const PLANK_STEP = 0.45;
 const PLANK_DEPTH = 0.32; // along the bridge
-const TEX_M = 9; // metres of rock covered by one tile of the rock texture
-const noise = new ImprovedNoise();
 
-// Sky, rock, bridge, clouds, waterfalls and birds. `update(t, camera)` (t in game seconds: the scene's clock, which stands still in a pause) drifts the clouds, scrolls the water,
+// Sky, rock, bridge, clouds, waterfalls, trees and birds. `update(t, camera)` (t in game seconds: the scene's clock, which stands still in a pause) drifts the clouds, scrolls the water,
 // flies the birds and keeps the stars centred on the camera.
-// `theme` (themes.js) gives the first look; `setTheme(theme)` swaps it later (sky, fog, rock lighting, clouds, water, extras).
+// `theme` (themes.js) gives the first look and `seed` the canyon's shapes (canyon.js); `setLook(theme, seed)` swaps them
+// later (sky, fog, rock and its lighting, clouds, water, extras). `canyons` (canyonBuild.js) hands over the canyon for a
+// seed, built ahead in a worker when it can be: `prepareCanyon(seed)` asks for the next one.
 // lite: a cheaper variant for TV GPUs, from profiling on an LG TV (PowerVR BXE-4-32): unlit rock with
 // baked lighting, Lambert planks, no anisotropic filtering, and fewer cloud cards.
-export function buildEnvironment(scene, renderer, { theme, lite = false }) {
+export function buildEnvironment(scene, renderer, { theme, seed = CLASSIC_SEED, lite = false, canyons = createCanyonBuilder() }) {
   const aniso = lite ? 1 : Math.min(renderer.capabilities.getMaxAnisotropy(), 4);
   scene.fog = new THREE.Fog(theme.fog.color, theme.fog.near, theme.fog.far);
 
   const skyBaker = createSkyBaker(scene, renderer);
   const rock = rockMaterial(aniso, lite);
-  const { mesh: cliffs, hosts } = buildCliffs(rock);
-  // The unlit vertex colours (crevice shading, depth, tint) are kept so every re-bake starts from them and never compounds.
-  const rockBase = lite ? cliffs.geometry.attributes.color.array.slice() : null;
-  const falls = buildWaterfalls(hosts);
+  const cliffs = new THREE.Mesh(new THREE.BufferGeometry(), rock);
+  cliffs.frustumCulled = false; // one big merged mesh, always on screen
+  let rockBase = null; // the rock's unlit vertex colours (crevice shading, depth, tint): every re-paint starts from them, so it never compounds
+  let canyonSeed = null;
+  const falls = buildWaterfalls();
+  const trees = buildTrees(lite);
   const clouds = lite ? buildClouds(scene.fog, 14, 4) : buildClouds(scene.fog, 300);
   const cloudFloor = lite ? buildCloudFloor() : null;
   const birds = buildBirds();
@@ -34,28 +37,46 @@ export function buildEnvironment(scene, renderer, { theme, lite = false }) {
   const windU = createWindUniforms(); // shared by the ropes and the cloth markers (windSway.js)
   const bridge = buildBridge(aniso, lite, windU);
   const gate = buildGate(rock);
-  const parts = { cliffs, bridge: bridge.group, gate: gate.mesh, clouds: clouds.mesh, falls: falls.group, birds: birds.points, stars: stars.points };
+  const parts = { cliffs, bridge: bridge.group, gate: gate.mesh, clouds: clouds.mesh, falls: falls.group, trees: trees.mesh, birds: birds.points, stars: stars.points };
   if (cloudFloor) parts.cloudFloor = cloudFloor.mesh;
   for (const [name, obj] of Object.entries(parts)) obj.name = name; // names make remote profiling on the TV readable
   scene.add(...Object.values(parts));
 
-  // Everything a theme changes that lives here. Cheap except the sky bake (6 cube faces + PMREM) and, in lite mode,
-  // the per-vertex rock lighting.
-  function setTheme(next) {
+  // A new canyon: the rock, the waterfalls on its backdrop cliffs and the trees. Painted by applyTheme after.
+  function swapCanyon(next) {
+    canyonSeed = next;
+    const c = canyons.take(next);
+    cliffs.geometry.dispose();
+    cliffs.geometry = geometryFrom(c.rock);
+    rockBase = c.rock.attributes.color.slice();
+    falls.setHosts(c.hosts);
+    trees.setGeometry(geometryFrom(c.trees));
+  }
+
+  // Everything a theme changes that lives here. Cheap except the sky bake (6 cube faces + PMREM) and the per-vertex
+  // rock colours (the grass, and in lite mode the lighting).
+  function applyTheme(next) {
     scene.fog.color.set(next.fog.color);
     scene.fog.near = next.fog.near;
     scene.fog.far = next.fog.far;
     skyBaker.bake(next);
     scene.environmentIntensity = next.envIntensity;
-    if (lite) bakeRockLighting(cliffs.geometry, rockBase, next);
-    else rock.color.setRGB(...next.rock.tint);
+    const { tint, desat, grass } = next.rock;
+    paintVertices(cliffs.geometry, rockBase, next, lite ? { lite, tint, desat, grass } : { grass });
+    if (!lite) rock.color.setRGB(...tint);
+    trees.setTheme(next);
     clouds.setTheme(next, scene.fog);
     cloudFloor?.setTheme(next);
     falls.setTint(next.falls.tint);
     birds.points.visible = next.birds;
     stars.points.visible = next.stars;
   }
-  setTheme(theme);
+
+  function setLook(next, nextSeed = canyonSeed) {
+    if (nextSeed !== canyonSeed) swapCanyon(nextSeed);
+    applyTheme(next);
+  }
+  setLook(theme, seed);
 
   return {
     // sway: -1..1, signed like the wind's dir (+1 sways toward screen right). One uniform, no rebuild.
@@ -78,7 +99,15 @@ export function buildEnvironment(scene, renderer, { theme, lite = false }) {
       if (!bridge.setOffsets(xs)) return;
       gate.setSpan(gateHalfSpan(xs));
     },
-    setTheme,
+    setLook,
+    setTheme: (next) => setLook(next),
+    // Starts building the canyon for a later setLook in the background (a no-op for the one already showing).
+    prepareCanyon(next) {
+      if (next !== canyonSeed) canyons.prepare(next);
+    },
+    get seed() {
+      return canyonSeed;
+    },
   };
 }
 
@@ -284,235 +313,17 @@ function rockMaterial(aniso, lite) {
   return mat;
 }
 
-function fbm(x, y, z, octaves) {
-  let sum = 0;
-  let amp = 1;
-  let freq = 1;
-  let norm = 0;
-  for (let i = 0; i < octaves; i++) {
-    sum += amp * noise.noise(x * freq, y * freq, z * freq);
-    norm += amp;
-    amp *= 0.5;
-    freq *= 2.03;
-  }
-  return sum / norm;
-}
-
-// Radial scale of the surface at an undisplaced point (px, pz) at height py above the rock's base: big bulges,
-// vertical flutes, and strata. The strata are layers that swell outward then step back in (ledges and overhangs); each
-// layer has its own hardness (how far it stands out) and the layers dip a little and wave with the noise, so their
-// edges are never level. `band` (optional) receives the layer's id, for the colour.
-function rockScale(spec, px, py, pz, band) {
-  const o = spec.o;
-  const k = spec.fq ?? 1; // noise frequency: small boulders need finer features
-  const x = px * k;
-  const y = py * k;
-  const z = pz * k;
-  const big = fbm(x * 0.06 + o[0], y * 0.035 + o[1], z * 0.06 + o[2], 4);
-  const flute = 1 - Math.abs(noise.noise(x * 0.32 + o[2], y * 0.02, z * 0.32 + o[0]));
-  const dip = ((spec.dip ?? 0) * (px * Math.cos(spec.dipDir ?? 0) + pz * Math.sin(spec.dipDir ?? 0))) / spec.bandH;
-  const s = y / spec.bandH + 0.9 * noise.noise(x * 0.05 + o[1], y * 0.015, z * 0.05) + dip;
-  const id = Math.floor(s);
-  const f = s - id;
-  const strata = sstep(f, 0, 0.8) * (1 - sstep(f, 0.8, 0.86));
-  const fine = fbm(x * 0.3 + o[1], y * 0.3 + o[0], z * 0.3 + o[2], 2);
-  if (band) band.id = id;
-  const push = (spec.strataAmp ?? 0.2) * bandHardness(spec.seed ?? 0, id);
-  const sc = 1 + spec.bulge * big + 0.14 * (flute - 0.5) + push * (strata - 0.4) + 0.035 * fine;
-  return Math.max(sc, 0.35);
-}
-
-// Columns lean and shift with height instead of standing as straight pipes. Writes [x, z] into out.
-function rockSway(spec, y, out) {
-  if (spec.flat) {
-    out[0] = out[1] = 0;
-    return out;
-  }
-  const t = y / spec.h;
-  const m = (spec.swayMul ?? 1) * spec.r * t;
-  out[0] = (Math.sin(y * 0.045 + spec.o[0]) * 0.28 + fbm(0, y * 0.02 + spec.o[1], spec.o[2], 2) * 0.5) * m;
-  out[1] = Math.cos(y * 0.037 + spec.o[2]) * 0.28 * m;
-  return out;
-}
-
-function cliffSpec(rand, p) {
-  return { ...p, o: [rand() * 200, rand() * 200, rand() * 200], bandH: 6 + rand() * 6 };
-}
-
-const SWAY = [0, 0];
-const BAND = { id: 0 };
-const TONE = [1, 1, 1];
-const STREAK = { mask: 0, kind: 'varnish' };
-
-// Where the cylinder's point (x, z) at row fraction t0 ends up, in the rock's own frame (metres from its axis and
-// above its base): the profile (taper, ledges, top shape), the cross-section, the noise and strata, the fissures, the
-// lean and the sway. Results in `out`: x, y, z, plus sc (the noise's own scale, for crevice shading), t (the row after
-// the ledge pull), ang (cylinder angle), rr (radius reached, for the texture's v), crack and under (0..1 shading).
-const DISPLACED = { x: 0, y: 0, z: 0, sc: 1, t: 0, ang: 0, rr: 0, crack: 0, under: 0 };
-function displace(spec, x, z, t0, out) {
-  const { r, rTop, h } = spec;
-  const t = warpT(spec, t0);
-  const y = t * h;
-  const lin = r + (rTop - r) * t0;
-  const ratio = (r * envelope(spec, t)) / lin;
-  const bx = x * ratio;
-  const bz = z * ratio;
-  const ang = Math.atan2(bx, bz); // the cylinder's own convention: x = sin, z = cos
-  const tier = tierIndex(spec, t);
-  const xs = crossSection(spec.squareness, ang - spec.rot0 - spec.tierTwist * tier);
-  let sc = rockScale(spec, bx, y, bz, BAND);
-  if (spec.flat) sc = 1 + (sc - 1) * (1 - 0.5 * sstep(t, 0.85, 0.98)); // level top, but the rim stays a little ragged
-  const crack = crackMask(spec, ang, t);
-  const f = xs * sc * (1 - spec.crackDepth * crack);
-  const sway = rockSway(spec, y, SWAY);
-  const shift = spec.tierShift * r * tier;
-  const ox = bx * f + sway[0] + spec.lean[0] * h * t + shift * Math.sin(spec.seed + tier * 2.3);
-  const oz = bz * f + sway[1] + spec.lean[1] * h * t + shift * Math.cos(spec.seed + tier * 1.7);
-  let yy = y;
-  if (!spec.flat && t > 0.8) {
-    const k = sstep(t, 0.85, 1);
-    if (spec.crown) yy += crown(spec, ang) * k;
-    if (spec.tilt) yy += spec.tilt * h * (bx / r) * k;
-    if (x === 0 && z === 0) yy += spec.capLift * h; // the cap's centre: a low pyramid on a crown
-    if (t > 0.9) {
-      const flatTop = spec.top === 'mesa' || spec.top === 'slant';
-      const rough = fbm(x * 0.25 + spec.o[0], 0, z * 0.25 + spec.o[2], 2) * 0.05 * sstep(t, 0.9, 1) * (flatTop ? 0.25 : 1);
-      const dome = flatTop ? 0 : 0.04 * (1 - Math.min(1, Math.hypot(x, z) / rTop));
-      yy += (rough + dome) * h;
-    }
-  }
-  out.x = ox * (spec.sx ?? 1) * spec.ax;
-  out.z = oz * spec.az;
-  out.y = yy;
-  out.sc = sc;
-  out.t = t;
-  out.ang = ang;
-  out.rr = Math.hypot(bx * f, bz * f);
-  out.crack = crack;
-  out.under = undercut(spec, t);
-  return out;
-}
-
-export function buildRockGeometry(spec) {
-  const { r, rTop, h, radial, rows } = spec;
-  const geo = new THREE.CylinderGeometry(rTop, r, h, radial, rows);
-  const pos = geo.attributes.position;
-  const uv = geo.attributes.uv;
-  const torso = (radial + 1) * (rows + 1);
-  const reps = Math.max(1, Math.round((Math.PI * (r + rTop)) / TEX_M)); // whole tiles around, so the seam matches
-  const colors = new Float32Array(pos.count * 3);
-  const { clamp } = THREE.MathUtils;
-  const [pr, pg, pb] = spec.pal.tint;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const z = pos.getZ(i);
-    const t0 = (pos.getY(i) + h / 2) / h;
-    const d = displace(spec, x, z, t0, DISPLACED);
-    pos.setXYZ(i, d.x, d.y - h / 2, d.z);
-    // texture: u around, v up the rock; v also follows how far a face steps in or out, so a ledge's top is not smeared
-    const v = (d.y + 0.8 * (r + (rTop - r) * d.t - d.rr)) / TEX_M;
-    if (i < torso) uv.setXY(i, uv.getX(i) * reps, v);
-    else uv.setXY(i, x / TEX_M, z / TEX_M);
-
-    // Baked colour, before the theme's lighting multiplies it: crevice darkening (noise, fissures, the shadow under a
-    // lip), deeper = darker (cloud shadow), darker at the foot and lighter at the top, the rock's own colour family,
-    // its strata band's tone, and the occasional mineral streak.
-    const ao = clamp(0.82 + (d.sc - 1) * 1.3, 0.45, 1.1) * (1 - 0.35 * d.under) * (1 - 0.55 * d.crack);
-    const depth = 0.55 + 0.45 * sstep(d.y + spec.base, -40, -2);
-    const tint = 0.04 * noise.noise(x * 0.02 + spec.o[0], d.y * 0.03, z * 0.02);
-    const grad = 0.84 + 0.26 * sstep(d.t, 0.05, 1);
-    const tone = bandTone(spec.seed, BAND.id, TONE);
-    const k = ao * depth * grad;
-    let cr = k * 0.8 * pr * tone[0];
-    // the neutral base (0.8, 0.85, 0.95) times the palettes' average, kept so the walls' overall colour stays where it was
-    let cg = k * (0.895 + tint) * pg * tone[1];
-    let cb = k * (1.05 + tint * 1.5) * pb * tone[2];
-    const st = streakAt(spec, d.ang, d.t, STREAK);
-    if (st.mask > 0) {
-      const m = STREAK_KINDS[st.kind];
-      cr *= 1 + (m[0] - 1) * st.mask;
-      cg *= 1 + (m[1] - 1) * st.mask;
-      cb *= 1 + (m[2] - 1) * st.mask;
-    }
-    colors.set([cr, cg, cb], i * 3);
-  }
-  geo.computeVertexNormals();
-  const nrm = geo.attributes.normal; // the cylinder seam duplicates vertices: average their normals
-  for (let j = 0; j <= rows; j++) {
-    const a = j * (radial + 1);
-    const b = a + radial;
-    const nx = nrm.getX(a) + nrm.getX(b);
-    const ny = nrm.getY(a) + nrm.getY(b);
-    const nz = nrm.getZ(a) + nrm.getZ(b);
-    const len = Math.hypot(nx, ny, nz) || 1;
-    nrm.setXYZ(a, nx / len, ny / len, nz / len);
-    nrm.setXYZ(b, nx / len, ny / len, nz / len);
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geo.translate(spec.x, spec.base + h / 2, spec.z);
-  return geo;
-}
-
-// Point on a rock's surface at angle `ang` (0 = +x) and height `y` above its base, in world space.
-function rockSurface(spec, ang, y) {
-  const t0 = y / spec.h;
-  const lin = spec.r + (spec.rTop - spec.r) * t0;
-  const d = displace(spec, Math.cos(ang) * lin, Math.sin(ang) * lin, t0, DISPLACED);
-  return { x: spec.x + d.x, y: spec.base + y, z: spec.z + d.z };
-}
-
-function cliffLayout(rand) {
-  const specs = [];
-  // is a point in the wedge of sky the sun sits in? keep it clear so the sun glows through the haze
-  const inSunGap = (x, z) => Math.abs(Math.atan2(x, -(z + 30)) - Math.atan2(-0.2, 0.97)) < 0.2;
-  for (const side of [-1, 1]) {
-    for (let z = 14; z > -105; z -= 9 + rand() * 4) {
-      const r = 7 + rand() * 3;
-      const h = 58 + rand() * 22;
-      specs.push(cliffSpec(rand, { tier: 'wall', wall: side, x: side * (r + 17 + rand() * 5), z: z - rand() * 4, base: -46, h, r, rTop: r * (0.62 + rand() * 0.2), radial: 34, rows: 52, bulge: 0.42 }));
-    }
-  }
-  for (let i = 0; i < 30; i++) {
-    const side = rand() < 0.5 ? -1 : 1;
-    const x = side * (30 + rand() * 40);
-    const z = 10 - rand() * 190;
-    const r = 3.5 + rand() * 3.5;
-    if (inSunGap(x, z)) continue;
-    specs.push(cliffSpec(rand, { tier: 'mid', x, z, base: -46, h: 75 + rand() * 55, r, rTop: r * (0.22 + rand() * 0.2), radial: 22, rows: 38, bulge: 0.45 }));
-  }
-  for (let i = 0; i < 22; i++) {
-    const side = rand() < 0.5 ? -1 : 1;
-    const x = side * (14 + rand() * 80);
-    const z = -110 - rand() * 130;
-    const r = 10 + rand() * 10;
-    if (inSunGap(x, z)) continue;
-    specs.push(cliffSpec(rand, { tier: 'far', x, z, base: -46, h: 110 + rand() * 60, r, rTop: r * (0.35 + rand() * 0.3), radial: 18, rows: 30, bulge: 0.4 }));
-  }
-  // big cliffs closing the canyon far ahead: they carry the waterfalls, seen head-on past the gate
-  for (const [x, z, r, h] of [[19, -130, 15, 150], [48, -112, 12, 130], [-62, -130, 14, 140]]) {
-    specs.push(cliffSpec(rand, { tier: 'backdrop', backdrop: true, x, z, base: -46, h, r, rTop: r * 0.5, radial: 34, rows: 60, bulge: 0.35 }));
-  }
-  // the bridge ledges: level, round tops at the bridge's height
-  for (const z of [3, -BRIDGE_LENGTH - 3]) {
-    specs.push(cliffSpec(rand, { tier: 'shelf', ledge: true, flat: true, sx: 1.9, x: 0, z, base: -40.05, h: 40, r: 6.4, rTop: 6, radial: 40, rows: 24, bulge: 0.25 }));
-    for (let k = 0; k < 7; k++) {
-      // boulders on the shelf, kept off the bridge path and the gate
-      const side = k % 2 ? 1 : -1;
-      const rr = 0.7 + rand() * 1.1;
-      specs.push(cliffSpec(rand, { tier: 'boulder', x: side * (4 + rand() * 6.5), z: z + (rand() - 0.5) * 7, base: -0.6, h: 1.4 + rand() * 1.8, r: rr, rTop: rr * 0.3, radial: 14, rows: 8, bulge: 0.5, fq: 7 }));
-    }
-  }
-  return specs;
-}
-
-// Light the rock per vertex, roughly as the scene's lights would (see scene.js): the sun, the fill from behind
-// the camera, and a sky/ground ambient standing in for the image-based light. Physically based diffuse is
-// albedo * intensity * N.L / PI, so the factors are each light's intensity / PI. Run once per theme, always from
-// `base` (the unlit colours), so re-baking never compounds.
+// Writes a mesh's vertex colours from `base`, its unlit albedo (kept, so a re-paint never compounds), for a theme.
+// grass: { tint, from, to } turns the rock green where it faces up (ledge tops, slopes): the albedo is multiplied by tint,
+// fully where the normal's y reaches `to`, not at all below `from`. lite: the lighting is baked in as well, roughly as the
+// scene's lights would light it (see scene.js): the sun, the fill from behind the camera, and a sky/ground ambient
+// standing in for the image-based light. Physically based diffuse is albedo * intensity * N.L / PI, so the factors are
+// each light's intensity / PI. Then the theme's tint, and desat (0..1) towards grey. Run once per theme.
 const FILL_DIR = new THREE.Vector3(3, 8, 12).normalize();
 const bakeColor = (hex, k) => new THREE.Color(hex).multiplyScalar(k);
+const ONE = [1, 1, 1];
 
-function bakeRockLighting(geo, base, theme) {
+function paintVertices(geo, base, theme, { lite = false, tint = ONE, desat = 0, grass = null }) {
   const n = geo.attributes.normal;
   const c = geo.attributes.color;
   const out = c.array;
@@ -522,22 +333,29 @@ function bakeRockLighting(geo, base, theme) {
   const fillC = bakeColor(...rock.fill);
   const skyC = bakeColor(...rock.sky);
   const groundC = bakeColor(...rock.ground);
-  const [tr, tg, tb] = rock.tint;
-  const desat = rock.desat;
+  const [tr, tg, tb] = tint;
   const wrap = rock.wrap ?? 0; // wrapped diffuse: low sun light that spills round onto sideways-facing rock
   for (let i = 0; i < n.count; i++) {
     const nx = n.getX(i);
     const ny = n.getY(i);
     const nz = n.getZ(i);
-    const sun = Math.max(0, (nx * sunDir.x + ny * sunDir.y + nz * sunDir.z + wrap) / (1 + wrap));
-    const fill = Math.max(0, nx * FILL_DIR.x + ny * FILL_DIR.y + nz * FILL_DIR.z);
-    const up = ny * 0.5 + 0.5;
-    const lr = groundC.r + (skyC.r - groundC.r) * up + sunC.r * sun + fillC.r * fill;
-    const lg = groundC.g + (skyC.g - groundC.g) * up + sunC.g * sun + fillC.g * fill;
-    const lb = groundC.b + (skyC.b - groundC.b) * up + sunC.b * sun + fillC.b * fill;
-    let r = base[i * 3] * lr * tr;
-    let g = base[i * 3 + 1] * lg * tg;
-    let b = base[i * 3 + 2] * lb * tb;
+    let r = base[i * 3];
+    let g = base[i * 3 + 1];
+    let b = base[i * 3 + 2];
+    if (grass) {
+      const k = sstep(ny, grass.from, grass.to);
+      r *= 1 + (grass.tint[0] - 1) * k;
+      g *= 1 + (grass.tint[1] - 1) * k;
+      b *= 1 + (grass.tint[2] - 1) * k;
+    }
+    if (lite) {
+      const sun = Math.max(0, (nx * sunDir.x + ny * sunDir.y + nz * sunDir.z + wrap) / (1 + wrap));
+      const fill = Math.max(0, nx * FILL_DIR.x + ny * FILL_DIR.y + nz * FILL_DIR.z);
+      const up = ny * 0.5 + 0.5;
+      r *= (groundC.r + (skyC.r - groundC.r) * up + sunC.r * sun + fillC.r * fill) * tr;
+      g *= (groundC.g + (skyC.g - groundC.g) * up + sunC.g * sun + fillC.g * fill) * tg;
+      b *= (groundC.b + (skyC.b - groundC.b) * up + sunC.b * sun + fillC.b * fill) * tb;
+    }
     if (desat > 0) {
       const grey = 0.3 * r + 0.59 * g + 0.11 * b;
       r += (grey - r) * desat;
@@ -551,55 +369,30 @@ function bakeRockLighting(geo, base, theme) {
   c.needsUpdate = true;
 }
 
-// Rounded boulders that make the walls look weathered: a few at the foot of each near wall, where it comes up out of
-// the clouds, and a couple sitting on its ledges. Each is a small cylinder shaped like an egg, 192 triangles.
-function scatterBoulders(styled, rand) {
-  const out = [];
-  const U = (a, b) => a + (b - a) * rand();
-  const boulder = (x, z, base, rr) => {
-    const h = rr * U(1.4, 2.2);
-    const spec = cliffSpec(rand, { tier: 'boulder', x, z, base, h, r: rr, rTop: rr * 0.5, radial: 12, rows: 8, bulge: 0.35, fq: Math.min(7, Math.max(2.5, 8 / rr)) });
-    spec.bandH = U(1.2, 2.4);
-    out.push(styleSpec(spec, mulberry32(Math.floor(rand() * 1e9))));
+// The green valley's pines (trees.js): one opaque mesh with vertex colours, shown only on a theme with `trees`. The TV
+// bakes their lighting like the rock's (MeshBasic); a desktop lights them (Lambert, faceted by their per-face normals).
+function buildTrees(lite) {
+  const material = lite ? new THREE.MeshBasicMaterial({ vertexColors: true }) : new THREE.MeshLambertMaterial({ vertexColors: true });
+  const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
+  mesh.frustumCulled = false; // spread over the whole canyon, like the rock
+  mesh.visible = false;
+  let base = null;
+  let painted = null; // the theme the colours are baked for
+  return {
+    mesh,
+    setGeometry(geo) {
+      mesh.geometry.dispose();
+      mesh.geometry = geo;
+      base = lite ? geo.attributes.color.array.slice() : null;
+      painted = null;
+    },
+    setTheme(theme) {
+      mesh.visible = !!theme.trees;
+      if (!lite || !mesh.visible || painted === theme) return;
+      paintVertices(mesh.geometry, base, theme, { lite });
+      painted = theme;
+    },
   };
-  for (const s of styled) {
-    const near = s.tier === 'wall' || (s.tier === 'mid' && s.z > -70 && rand() < 0.5);
-    if (!near) continue;
-    const side = s.wall ?? (Math.sign(s.x) || 1);
-    const face = Math.atan2(1, -side); // the way the camera sees the wall: towards the canyon and the walker
-    for (let n = 1 + Math.floor(rand() * 2); n > 0; n--) {
-      const y = U(-31, -21) - s.base; // where the wall comes up out of the cloud sea
-      const a = face + U(-0.9, 0.9);
-      const p = rockSurface(s, a, y);
-      const rr = U(2.5, 5);
-      boulder(p.x - Math.cos(a) * rr * 0.2, p.z - Math.sin(a) * rr * 0.2, p.y - rr * 0.6, rr);
-    }
-    // one or two on ledges that are wide enough to hold them
-    for (const L of s.ledges) {
-      if (L.depth < 0.07 || rand() < 0.45) continue;
-      const a = face + U(-0.7, 0.7);
-      const p = rockSurface(s, a, L.t * s.h + 0.8);
-      const rr = U(0.7, 1.4);
-      const out2 = L.depth * s.r * 0.3;
-      boulder(p.x + Math.cos(a) * out2, p.z + Math.sin(a) * out2, s.base + L.t * s.h - rr * 0.5, rr);
-    }
-  }
-  return out;
-}
-
-// Every rock of the canyon, styled: the layout (positions, sizes), each rock's own look (rockStyle.js) and the boulders.
-export function cliffSpecs() {
-  const rand = mulberry32(42);
-  // Each rock styles itself from its own random stream, so the layout keeps its positions.
-  const styled = cliffLayout(rand).map((spec, i) => styleSpec(spec, mulberry32(0x5eed + i * 7919)));
-  return styled.concat(scatterBoulders(styled, mulberry32(4242)));
-}
-
-function buildCliffs(material) {
-  const specs = cliffSpecs();
-  const mesh = new THREE.Mesh(mergeGeometries(specs.map(buildRockGeometry)), material);
-  mesh.frustumCulled = false; // one big merged mesh, always on screen
-  return { mesh, hosts: specs.filter((s) => s.backdrop) };
 }
 
 // Boxes with world-scaled UVs (axis picked by each vertex's normal) so stone doesn't stretch.
@@ -1078,8 +871,9 @@ function streakTexture() {
 }
 
 // Free-falling curtains of water that pour off a lip high on a few near cliffs, hang just clear of the rock
-// and fade into the clouds. Flat sheets turned towards the camera, scrolled by texture offset.
-function buildWaterfalls(hosts) {
+// and fade into the clouds. Flat sheets turned towards the camera, scrolled by texture offset. setHosts(hosts) hangs
+// them on a canyon's backdrop cliffs (each canyon has its own: canyonBuild.js).
+function buildWaterfalls() {
   const tex = streakTexture();
   const mat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, color: new THREE.Color(2.4, 2.4, 2.3) });
   const group = new THREE.Group();
@@ -1088,60 +882,67 @@ function buildWaterfalls(hosts) {
     [48, -112],
     [-62, -130],
   ];
-  const rand = mulberry32(77);
-  for (const [xWant, zWant] of picks) {
-    const dist = (w) => Math.hypot(w.x - xWant, w.z - zWant);
-    const spec = hosts.reduce((best, w) => (dist(w) < dist(best) ? w : best));
-    const ang = Math.atan2(-20 - spec.z, -spec.x) + (rand() - 0.5) * 0.3; // the face turned towards the walker's end of the canyon
-    const dir = new THREE.Vector2(Math.cos(ang), Math.sin(ang));
-    const top = spec.h * 0.5; // local height of the lip
-    const bottom = 12; // down into the clouds
-    // how far the cliff juts out towards the camera anywhere along the drop: the curtain hangs just clear of it
-    let out = 0;
-    for (let y = bottom; y <= top; y += 1.5) {
-      const p = rockSurface(spec, ang, y);
-      out = Math.max(out, (p.x - spec.x) * dir.x + (p.z - spec.z) * dir.y);
+  function setHosts(hosts) {
+    for (const old of [...group.children]) {
+      old.geometry.dispose();
+      group.remove(old);
     }
-    const cx = spec.x + dir.x * (out + 0.5);
-    const cz = spec.z + dir.y * (out + 0.5);
-    const width = 7 + rand() * 3;
-    const rowsN = 40;
-    const verts = [];
-    const colors = [];
-    const uvs = [];
-    const index = [];
-    const v0 = rand() * 4;
-    const cols = 2;
-    for (let j = 0; j <= rowsN; j++) {
-      const f = j / rowsN;
-      const y = top + (bottom - top) * f;
-      const fade = THREE.MathUtils.smoothstep(f, 0, 0.05) * (1 - THREE.MathUtils.smoothstep(f, 0.6, 0.98));
-      const spread = 1 + f * 0.5; // the curtain widens as it falls
-      for (let i = 0; i <= cols; i++) {
-        const side = (i / cols - 0.5) * width * spread;
-        verts.push(cx - dir.y * side, spec.base + y, cz + dir.x * side);
-        colors.push(1, 1, 1, fade * (1 - Math.pow(Math.abs(i / cols - 0.5) * 2, 2)) * 0.95);
-        uvs.push(i / cols, v0 + (top - y) / 14);
+    const rand = mulberry32(77);
+    for (const [xWant, zWant] of picks) {
+      const dist = (w) => Math.hypot(w.x - xWant, w.z - zWant);
+      const spec = hosts.reduce((best, w) => (dist(w) < dist(best) ? w : best));
+      const ang = Math.atan2(-20 - spec.z, -spec.x) + (rand() - 0.5) * 0.3; // the face turned towards the walker's end of the canyon
+      const dir = new THREE.Vector2(Math.cos(ang), Math.sin(ang));
+      const top = spec.h * 0.5; // local height of the lip
+      const bottom = 12; // down into the clouds
+      // how far the cliff juts out towards the camera anywhere along the drop: the curtain hangs just clear of it
+      let out = 0;
+      for (let y = bottom; y <= top; y += 1.5) {
+        const p = rockSurface(spec, ang, y);
+        out = Math.max(out, (p.x - spec.x) * dir.x + (p.z - spec.z) * dir.y);
       }
-    }
-    for (let j = 0; j < rowsN; j++) {
-      for (let i = 0; i < cols; i++) {
-        const a = j * (cols + 1) + i;
-        index.push(a, a + cols + 1, a + 1, a + 1, a + cols + 1, a + cols + 2);
+      const cx = spec.x + dir.x * (out + 0.5);
+      const cz = spec.z + dir.y * (out + 0.5);
+      const width = 7 + rand() * 3;
+      const rowsN = 40;
+      const verts = [];
+      const colors = [];
+      const uvs = [];
+      const index = [];
+      const v0 = rand() * 4;
+      const cols = 2;
+      for (let j = 0; j <= rowsN; j++) {
+        const f = j / rowsN;
+        const y = top + (bottom - top) * f;
+        const fade = THREE.MathUtils.smoothstep(f, 0, 0.05) * (1 - THREE.MathUtils.smoothstep(f, 0.6, 0.98));
+        const spread = 1 + f * 0.5; // the curtain widens as it falls
+        for (let i = 0; i <= cols; i++) {
+          const side = (i / cols - 0.5) * width * spread;
+          verts.push(cx - dir.y * side, spec.base + y, cz + dir.x * side);
+          colors.push(1, 1, 1, fade * (1 - Math.pow(Math.abs(i / cols - 0.5) * 2, 2)) * 0.95);
+          uvs.push(i / cols, v0 + (top - y) / 14);
+        }
       }
+      for (let j = 0; j < rowsN; j++) {
+        for (let i = 0; i < cols; i++) {
+          const a = j * (cols + 1) + i;
+          index.push(a, a + cols + 1, a + 1, a + 1, a + cols + 1, a + cols + 2);
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      g.setIndex(index);
+      const mesh = new THREE.Mesh(g, mat);
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 1;
+      group.add(mesh);
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-    g.setIndex(index);
-    const mesh = new THREE.Mesh(g, mat);
-    mesh.frustumCulled = false;
-    mesh.renderOrder = 1;
-    group.add(mesh);
   }
   return {
     group,
+    setHosts,
     update(t) {
       tex.offset.y = t * 0.45; // streaks run down the ribbon
     },

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '../src/game/rng.js';
 import { ARCHETYPES, PALETTES, TIER_WEIGHTS, bandHardness, bandTone, crackMask, crossSection, envelope, hash01, pickArchetype, rockPalette, streakAt, styleSpec, tierIndex, warpT } from '../src/tv/rockStyle.js';
-import { buildRockGeometry, cliffSpecs } from '../src/tv/environment.js';
+import { buildRockGeometry, cliffSpecs } from '../src/tv/canyon.js';
 
 const baseSpec = (tier, extra = {}) => ({ tier, x: 30, z: -20, base: -46, h: 70, r: 8, rTop: 5.5, radial: 34, rows: 52, bulge: 0.42, o: [1, 2, 3], bandH: 8, ...extra });
 
