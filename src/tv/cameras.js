@@ -90,11 +90,12 @@ export function dampStep(x, v, target, omega, dt) {
 // A raised three-quarter "drone" shot from behind and to one side, looking ahead along the bridge. The first
 // version sat low at the side and, on the TV, mostly framed a dark rock wall with the soldier as a silhouette.
 export const CINEMA = {
-  side: 3.4, // m to the side of the bridge axis
-  ahead: -4, // negative: behind the walker, so the bridge, the gaps ahead and the sky are all in frame
-  deck: 3.2, // camera height at mid-bridge: above the deck, looking down into the canyon
+  // Pulled in after a TV play test, where the soldier was too small in frame (was 3.4 / -4 / 3.2 / 5).
+  side: 2.6, // m to the side of the bridge axis
+  ahead: -3, // negative: behind the walker, so the bridge, the gaps ahead and the sky are all in frame
+  deck: 2.5, // camera height at mid-bridge: above the deck, looking down into the canyon
   ledge: 4.2, // camera height over the rock ledges at both ends, which would otherwise swallow it
-  lookAhead: 5, // the aim point runs this far ahead of him, so the shot leads into the canyon
+  lookAhead: 3.5, // the aim point runs this far ahead of him, so the shot leads into the canyon
   ledgeMetres: 3.4, // how far from either end of the bridge the ledge height is fully applied
   ledgeBlend: 3, // and how far it takes to come down to the deck height
   camOmega: 2.6, // follow speeds: the camera lags the walker a little, the aim point less
