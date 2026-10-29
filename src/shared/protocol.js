@@ -1,7 +1,14 @@
 // Every message is a small JSON object with a type field `t`.
-// phone → tv: tilt {v}, walk {on}, run {on}, jump, camera (cycle the view), pause (toggle), volume {music, sfx}, start
-// tv → phone: state {phase, lives, level, ...}      server → client: room {room}, paired, peer-left, error {reason}
-export const RELAYED = new Set(['tilt', 'walk', 'run', 'jump', 'camera', 'pause', 'volume', 'start', 'state']);
+// phone → tv: tilt {v}, walk {on}, run {on}, jump, camera (cycle the view), pause (toggle), volume {music, sfx}, start,
+//             gust {dir: -1|1} (the Wind Master), mode {mode: 'solo'|'race'|'windmaster'}.
+//             The server stamps every one of these with p: 1|2, the sender's player slot (whatever the client sent is overwritten).
+// tv → phone: state {phase, lives, level, ..., to?}. With to: 1|2 it goes to that player only (the server strips `to`);
+//             without it, to every phone.
+// server → client: room {room}, paired {player}, peer-left {player (TV side) | nothing (phone side)}, error {reason}
+export const PHONE_TYPES = new Set(['tilt', 'walk', 'run', 'jump', 'camera', 'pause', 'volume', 'start', 'gust', 'mode']);
+export const TV_TYPES = new Set(['state']);
+export const RELAYED = new Set([...PHONE_TYPES, ...TV_TYPES]);
+export const MODES = ['solo', 'race', 'windmaster'];
 const unit = (v) => Math.max(0, Math.min(1, v));
 const SERVER_TYPES = new Set(['room', 'paired', 'peer-left', 'error']);
 const ROOM_RE = /^[A-Z]{4}$/;
@@ -40,8 +47,13 @@ export function decode(raw) {
       return Number.isFinite(msg.music) && Number.isFinite(msg.sfx) ? { t: 'volume', music: unit(msg.music), sfx: unit(msg.sfx) } : null;
     case 'start':
       return { t: 'start' };
+    case 'gust':
+      return msg.dir === -1 || msg.dir === 1 ? { t: 'gust', dir: msg.dir } : null;
+    case 'mode':
+      return MODES.includes(msg.mode) ? { t: 'mode', mode: msg.mode } : null;
     case 'state':
-      return msg;
+      // The TV owns this message's shape. The one field the relay acts on is `to`: a phone number, or absent (null counts as absent).
+      return msg.to == null || msg.to === 1 || msg.to === 2 ? msg : null;
     default:
       return SERVER_TYPES.has(msg.t) ? msg : null;
   }

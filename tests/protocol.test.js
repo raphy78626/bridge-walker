@@ -42,7 +42,7 @@ describe('protocol', () => {
   });
 
   it('only relays gameplay messages between peers', () => {
-    expect([...RELAYED].sort()).toEqual(['camera', 'jump', 'pause', 'run', 'start', 'state', 'tilt', 'volume', 'walk']);
+    expect([...RELAYED].sort()).toEqual(['camera', 'gust', 'jump', 'mode', 'pause', 'run', 'start', 'state', 'tilt', 'volume', 'walk']);
   });
 
   it('validates run: needs a boolean on', () => {
@@ -77,5 +77,25 @@ describe('protocol', () => {
   it('accepts jump and strips any fields', () => {
     expect(decode(encode({ t: 'jump' }))).toEqual({ t: 'jump' });
     expect(decode(encode({ t: 'jump', height: 99, on: true }))).toEqual({ t: 'jump' });
+  });
+
+  it('accepts gust with dir -1 or 1 only, and strips other fields', () => {
+    expect(decode(encode({ t: 'gust', dir: -1 }))).toEqual({ t: 'gust', dir: -1 });
+    expect(decode(encode({ t: 'gust', dir: 1, p: 2, strength: 99 }))).toEqual({ t: 'gust', dir: 1 });
+    for (const dir of [0, 2, '1', null, undefined, 0.5]) expect(decode(encode({ t: 'gust', dir }))).toBeNull();
+    expect(decode(encode({ t: 'gust' }))).toBeNull();
+  });
+
+  it('accepts mode for the three known modes only', () => {
+    for (const mode of ['solo', 'race', 'windmaster']) expect(decode(encode({ t: 'mode', mode, evil: 1 }))).toEqual({ t: 'mode', mode });
+    for (const mode of ['coop', '', 1, null]) expect(decode(encode({ t: 'mode', mode }))).toBeNull();
+    expect(decode(encode({ t: 'mode' }))).toBeNull();
+  });
+
+  it('lets state carry `to` as 1 or 2 and rejects any other value', () => {
+    expect(decode(encode({ t: 'state', phase: 'lobby', to: 2 }))).toEqual({ t: 'state', phase: 'lobby', to: 2 });
+    expect(decode(encode({ t: 'state', phase: 'lobby' }))).toEqual({ t: 'state', phase: 'lobby' });
+    expect(decode(encode({ t: 'state', phase: 'lobby', to: null }))).toEqual({ t: 'state', phase: 'lobby', to: null });
+    for (const to of [0, 3, '1', [1]]) expect(decode(encode({ t: 'state', phase: 'lobby', to }))).toBeNull();
   });
 });

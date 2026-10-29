@@ -108,12 +108,52 @@ describe('relay', () => {
     const phone = await connect(mainPort);
     const paired = nextMsg(tv);
     phone.send(JSON.stringify({ t: 'join', role: 'phone', room }));
-    expect(await paired).toEqual({ t: 'paired' });
-    expect(await nextMsg(phone)).toEqual({ t: 'paired' });
+    expect(await paired).toEqual({ t: 'paired', player: 1 });
+    expect(await nextMsg(phone)).toEqual({ t: 'paired', player: 1 });
 
     const tilt = nextMsg(tv);
-    phone.send(JSON.stringify({ t: 'tilt', v: 0.5 }));
-    expect(await tilt).toEqual({ t: 'tilt', v: 0.5 });
+    phone.send(JSON.stringify({ t: 'tilt', v: 0.5, p: 2 })); // the server overwrites a claimed p
+    expect(await tilt).toEqual({ t: 'tilt', v: 0.5, p: 1 });
+  });
+
+  it('pairs two phones, stamps p, routes `to`, and refuses a third phone', async () => {
+    await start();
+    // Queue every message a socket gets, so none is missed between two awaits.
+    const inbox = (ws) => {
+      const queue = [];
+      const waiting = [];
+      ws.on('message', (d) => (waiting.length ? waiting.shift()(JSON.parse(d.toString())) : queue.push(JSON.parse(d.toString()))));
+      return () => (queue.length ? Promise.resolve(queue.shift()) : new Promise((r) => waiting.push(r)));
+    };
+    const tv = await connect(tvPort);
+    const tvNext = inbox(tv);
+    tv.send(JSON.stringify({ t: 'join', role: 'tv' }));
+    const { room } = await tvNext();
+    const join = async () => {
+      const ws = await connect(mainPort);
+      const next = inbox(ws);
+      ws.send(JSON.stringify({ t: 'join', role: 'phone', room }));
+      return [ws, next];
+    };
+    const [p1, next1] = await join();
+    const [p2, next2] = await join();
+    expect(await next1()).toEqual({ t: 'paired', player: 1 });
+    expect(await next2()).toEqual({ t: 'paired', player: 2 });
+    expect(await tvNext()).toEqual({ t: 'paired', player: 1 });
+    expect(await tvNext()).toEqual({ t: 'paired', player: 2 });
+
+    p2.send(JSON.stringify({ t: 'gust', dir: 1, p: 1 }));
+    expect(await tvNext()).toEqual({ t: 'gust', dir: 1, p: 2 });
+
+    tv.send(JSON.stringify({ t: 'state', phase: 'lobby', to: 2, you: 2 }));
+    tv.send(JSON.stringify({ t: 'state', phase: 'playing' }));
+    expect(await next2()).toEqual({ t: 'state', phase: 'lobby', you: 2 }); // the targeted one
+    expect(await next1()).toEqual({ t: 'state', phase: 'playing' }); // player 1 never saw the targeted one
+    expect(await next2()).toEqual({ t: 'state', phase: 'playing' });
+
+    const [, next3] = await join();
+    expect(await next3()).toEqual({ t: 'error', reason: 'room-full' });
+    void p1;
   });
 
   it('answers no-room to a phone with a malformed room code', async () => {

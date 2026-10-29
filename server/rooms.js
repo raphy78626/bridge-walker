@@ -1,10 +1,11 @@
-import { encode, RELAYED } from '../src/shared/protocol.js';
+import { encode, PHONE_TYPES, TV_TYPES } from '../src/shared/protocol.js';
 
 const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I or O: easy to read off a TV
+const SLOTS = [1, 2]; // player numbers; a phone takes the lowest free one
 
 export function createRooms() {
-  const rooms = new Map(); // code -> { tv, phone }
-  const members = new Map(); // socket -> { code, role }
+  const rooms = new Map(); // code -> { tv, phones: { 1: socket|null, 2: socket|null } }
+  const members = new Map(); // socket -> { code, role, player? }
 
   const send = (sock, msg) => sock?.send(encode(msg));
 
@@ -20,7 +21,7 @@ export function createRooms() {
     if (members.has(sock)) leave(sock); // re-join: clean up the old membership first
     if (msg.role === 'tv') {
       const code = newCode();
-      rooms.set(code, { tv: sock, phone: null });
+      rooms.set(code, { tv: sock, phones: { 1: null, 2: null } });
       members.set(sock, { code, role: 'tv' });
       send(sock, { t: 'room', room: code });
       return;
@@ -30,21 +31,33 @@ export function createRooms() {
       send(sock, { t: 'error', reason: 'no-room' });
       return;
     }
-    if (room.phone) {
-      members.delete(room.phone);
-      send(room.phone, { t: 'error', reason: 'replaced' });
+    const player = SLOTS.find((n) => !room.phones[n]);
+    if (!player) {
+      send(sock, { t: 'error', reason: 'room-full' });
+      return;
     }
-    room.phone = sock;
-    members.set(sock, { code: msg.room, role: 'phone' });
-    send(room.tv, { t: 'paired' });
-    send(sock, { t: 'paired' });
+    room.phones[player] = sock;
+    members.set(sock, { code: msg.room, role: 'phone', player });
+    send(room.tv, { t: 'paired', player });
+    send(sock, { t: 'paired', player });
   }
 
+  // Phone → TV: only the phone's own message types, stamped with its slot. TV → phones: only `state`, to one
+  // player when `to` is 1|2, else to every phone. `to` and `p` never travel past the server.
   function relay(sock, msg) {
     const who = members.get(sock);
-    if (!who || !RELAYED.has(msg.t)) return;
+    if (!who) return;
     const room = rooms.get(who.code);
-    send(who.role === 'tv' ? room.phone : room.tv, msg);
+    if (who.role === 'phone') {
+      if (!PHONE_TYPES.has(msg.t)) return;
+      const { to, ...rest } = msg;
+      send(room.tv, { ...rest, p: who.player });
+    } else {
+      if (!TV_TYPES.has(msg.t)) return;
+      const { to, p, ...rest } = msg;
+      if (to === 1 || to === 2) send(room.phones[to], rest);
+      else for (const n of SLOTS) send(room.phones[n], rest);
+    }
   }
 
   function leave(sock) {
@@ -54,13 +67,15 @@ export function createRooms() {
     const room = rooms.get(who.code);
     if (who.role === 'tv') {
       rooms.delete(who.code);
-      if (room.phone) {
-        members.delete(room.phone);
-        send(room.phone, { t: 'peer-left' });
+      for (const n of SLOTS) {
+        const phone = room.phones[n];
+        if (!phone) continue;
+        members.delete(phone);
+        send(phone, { t: 'peer-left' });
       }
     } else {
-      room.phone = null;
-      send(room.tv, { t: 'peer-left' });
+      room.phones[who.player] = null;
+      send(room.tv, { t: 'peer-left', player: who.player });
     }
   }
 
