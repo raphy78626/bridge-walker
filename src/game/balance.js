@@ -20,8 +20,9 @@ export function createWalker() {
 }
 
 // One physics step. tilt in [-1, 1], wind in lean-acceleration units, dt in seconds.
+// instability multiplies how fast a lean grows on its own (1 = the level-1 feel; difficulty.js raises it per level).
 // running overrides walking. jump is a one-shot: it starts a jump only from the ground.
-export function stepWalker(w, { tilt, walking, running = false, jump = false, wind }, dt) {
+export function stepWalker(w, { tilt, walking, running = false, jump = false, wind, instability: level = 1 }, dt) {
   if (w.fallen) return w;
 
   const inputSpeed = running ? RUN_SPEED : walking ? WALK_SPEED : 0;
@@ -33,7 +34,7 @@ export function stepWalker(w, { tilt, walking, running = false, jump = false, wi
   }
 
   // In the air the lean is as unstable as standing still, whatever the feet were doing.
-  const instability = GRAVITY * (airborne ? 1 : running ? RUN_WOBBLE : walking ? WALK_WOBBLE : 1);
+  const instability = GRAVITY * level * (airborne ? 1 : running ? RUN_WOBBLE : walking ? WALK_WOBBLE : 1);
   const acc = instability * Math.sin(w.lean) + wind + CONTROL * tilt - DAMPING * w.leanVel;
   const leanVel = w.leanVel + acc * dt;
   const lean = w.lean + leanVel * dt;

@@ -77,6 +77,19 @@ describe('balance', () => {
     expect(step({ walking: true, running: true }).speed).toBe(RUN_SPEED);
   });
 
+  it('instability multiplies how fast a lean grows, and 1 (or omitted) is the unchanged feel', () => {
+    const lean = (instability) => {
+      let w = { ...createWalker(), lean: 0.05 };
+      for (let i = 0; i < 120; i++) w = stepWalker(w, { tilt: 0, walking: true, wind: 0, instability }, DT);
+      return w.lean;
+    };
+    let plain = { ...createWalker(), lean: 0.05 };
+    for (let i = 0; i < 120; i++) plain = stepWalker(plain, { tilt: 0, walking: true, wind: 0 }, DT);
+    expect(lean(1)).toBe(plain.lean);
+    expect(lean(1.4)).toBeGreaterThan(lean(1.2));
+    expect(lean(1.2)).toBeGreaterThan(lean(1));
+  });
+
   it('runs twice as fast as it walks', () => {
     expect(run(createWalker(), { running: true }, 2, steady).z).toBeCloseTo(2 * RUN_SPEED, 1);
   });
