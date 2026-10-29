@@ -212,10 +212,16 @@ for (const [id, key] of [['vol-music', 'music'], ['vol-sfx', 'sfx']]) {
     sendVolume();
   });
 }
-$('btn-sound').addEventListener('click', () => {
-  const sheet = $('sound-sheet');
-  sheet.hidden = !sheet.hidden;
-  $('btn-sound').setAttribute('aria-expanded', String(!sheet.hidden));
+// The sheet floats over the top of the middle column, so on a short phone it can cover the Sound button: Done closes it.
+function setSoundSheet(open) {
+  $('sound-sheet').hidden = !open;
+  $('btn-sound').setAttribute('aria-expanded', String(open));
+  if (open) $('btn-sound-done').focus({ preventScroll: true });
+}
+$('btn-sound').addEventListener('click', () => setSoundSheet($('sound-sheet').hidden));
+$('btn-sound-done').addEventListener('click', () => {
+  setSoundSheet(false);
+  $('btn-sound').focus({ preventScroll: true });
 });
 $('btn-recalibrate').addEventListener('click', () => {
   clearSign();

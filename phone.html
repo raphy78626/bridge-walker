@@ -38,9 +38,10 @@
           <button id="btn-camera" class="view" type="button" aria-label="Change camera view: chase, first person, cinematic.">🎥 VIEW</button>
           <button id="btn-sound" class="view" type="button" aria-expanded="false" aria-controls="sound-sheet">🔊 Sound</button>
         </div>
-        <div id="sound-sheet" class="sheet" hidden>
+        <div id="sound-sheet" class="sheet" role="group" aria-label="Sound" hidden>
           <label>Music <input id="vol-music" type="range" min="0" max="100" step="5" /></label>
           <label>Effects <input id="vol-sfx" type="range" min="0" max="100" step="5" /></label>
+          <button id="btn-sound-done" class="big" type="button">Done</button>
         </div>
         <button id="btn-recalibrate" class="link" type="button">Recalibrate</button>
       </div>
