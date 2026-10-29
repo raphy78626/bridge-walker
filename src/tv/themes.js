@@ -1,6 +1,6 @@
-// The look-and-sound themes the levels cycle through. Each theme is a plain object keyed by `id`; other
-// modules add their own fields to it (the sound for each id lives in THEME_SOUNDS in audio.js, keyed by
-// the same id). The visual fields below are plain data (hex numbers and arrays), read by scene.js and
+// The look-and-sound themes. Every level picks one at random, never the one before (looks.js). Each theme is a plain
+// object keyed by `id`; other modules add their own fields to it (the sound for each id lives in THEME_SOUNDS in
+// audio.js, keyed by the same id). The visual fields below are plain data (hex numbers and arrays), read by scene.js and
 // environment.js; this file imports nothing, so audio.js and the tests can use it freely.
 //
 //   sun       the key light (the moon at night): dir points TOWARDS it, x right, y up, -z down the bridge
@@ -12,10 +12,11 @@
 //             far the grade goes from `top` (overhead) to `low` (horizon and sun side); the grade multiplies the
 //             Preetham colour. 'night' themes: a dark gradient (top/horizon in sRGB hex) with a moon disc.
 //   rock      what the lite rock's baked vertex lighting adds besides the sun: fill, sky ambient and ground
-//             ambient as [hex, strength], a per-channel tint, and desat (0..1, towards grey)
+//             ambient as [hex, strength], a per-channel tint, and desat (0..1, towards grey). Optional grass:
+//             { tint, from, to }, the albedo multiplier for rock that faces up (normal y from `from` to `to`)
 //   clouds    tint: per-channel colour of the cloud sea; lift: metres the whole sea is raised
 //   falls     per-channel tint of the waterfalls
-//   birds / stars   which extras are drawn
+//   birds / stars / trees   which extras are drawn (trees: the pines on the ledges and rock tops, trees.js)
 
 export const THEMES = [
   {
@@ -82,12 +83,24 @@ export const THEMES = [
     birds: false,
     stars: true,
   },
+  {
+    // A lush green valley in fresh mid-morning light from behind the camera, so the sky ahead is a clear, cool blue:
+    // blue-green haze, moss on the rock and grass on every ledge and slope, pines on the ledges and plateaus, and a
+    // blue-green river mist below.
+    id: 'valley',
+    name: 'Green Valley',
+    sun: { dir: [0.45, 0.6, 0.66], color: 0xfff2d8, intensity: 3.0 },
+    fill: { color: 0xd2ecff, intensity: 1.0 },
+    hemi: { sky: 0xe0f0d0, ground: 0x3a5a2c, intensity: 0.6 },
+    exposure: 0.55,
+    envIntensity: 0.35, // the blue sky's light would turn the moss grey on a desktop
+    fog: { color: 0x9cc6d2, near: 18, far: 220 },
+    sky: { kind: 'preetham', turbidity: 2, rayleigh: 2.8, mie: 0.004, mieG: 0.85, warm: [1.6, 0.35, 0.3, 4], top: [0.5, 0.8, 1.35], low: [0.72, 0.94, 1.08] },
+    rock: { fill: [0xd8f0e0, 0.75], sky: [0xbfe0d0, 1.0], ground: [0x405a30, 0.45], tint: [0.74, 1.0, 0.62], desat: 0.1, grass: { tint: [0.5, 1.2, 0.28], from: 0.3, to: 0.75 } },
+    clouds: { tint: [0.84, 1.04, 1.02], lift: -2 },
+    falls: { tint: [2.3, 2.6, 2.6] },
+    birds: true,
+    stars: false,
+    trees: true,
+  },
 ];
-
-// Level 1 is the first theme, level 5 comes round to it again. Anything that is not a level number
-// (0, NaN, a negative) counts as level 1.
-export function themeForLevel(level) {
-  const n = Math.floor(Number(level));
-  const i = Number.isFinite(n) && n >= 1 ? n - 1 : 0;
-  return THEMES[i % THEMES.length];
-}

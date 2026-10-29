@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync } from 'node:fs';
-import { THEMES, themeForLevel } from '../src/tv/themes.js';
+import { THEMES } from '../src/tv/themes.js';
 import { THEME_SOUNDS } from '../src/tv/audio.js';
 
 describe('THEMES', () => {
-  it('are plain objects with a unique id and a name, in level order', () => {
-    expect(THEMES.map((t) => t.id)).toEqual(['golden', 'morning', 'sunset', 'night']);
+  it('are plain objects with a unique id and a name', () => {
+    expect(THEMES.map((t) => t.id)).toEqual(['golden', 'morning', 'sunset', 'night', 'valley']);
     expect(new Set(THEMES.map((t) => t.id)).size).toBe(THEMES.length);
     for (const t of THEMES) {
       expect(Object.getPrototypeOf(t)).toBe(Object.prototype);
@@ -16,7 +16,7 @@ describe('THEMES', () => {
 
   it('can be extended with more fields by other modules', () => {
     const extended = THEMES.map((t) => ({ ...t, sky: '#fff' }));
-    expect(themeForLevel(2).id).toBe(extended[1].id);
+    expect(extended.map((t) => t.id)).toEqual(THEMES.map((t) => t.id));
   });
 });
 
@@ -35,7 +35,7 @@ describe('theme visuals', () => {
     }
   });
   it('keeps the audio-facing names', () => {
-    expect(THEMES.map((t) => t.name)).toEqual(['Golden Afternoon', 'Misty Morning', 'Sunset', 'Moonlit Night']);
+    expect(THEMES.map((t) => t.name)).toEqual(['Golden Afternoon', 'Misty Morning', 'Sunset', 'Moonlit Night', 'Green Valley']);
   });
   it('morning has thicker fog, a higher cloud sea and a side sun; sunset a sun near the horizon ahead', () => {
     expect(byId.morning.fog.near).toBeLessThan(byId.golden.fog.near);
@@ -53,16 +53,28 @@ describe('theme visuals', () => {
   });
 });
 
-describe('themeForLevel', () => {
-  it('cycles the themes by level', () => {
-    const ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13].map((l) => themeForLevel(l).id);
-    expect(ids).toEqual(['golden', 'morning', 'sunset', 'night', 'golden', 'morning', 'sunset', 'night', 'golden', 'night', 'golden']);
-    for (let level = 1; level <= 40; level++) expect(themeForLevel(level)).toBe(THEMES[(level - 1) % THEMES.length]);
+describe('the green valley', () => {
+  const byId = Object.fromEntries(THEMES.map((t) => [t.id, t]));
+  const v = byId.valley;
+  const greenish = ([r, g, b]) => g > r && g > b;
+  it('is the only theme with grass and trees, and grass turns up-facing rock green', () => {
+    expect(THEMES.filter((t) => t.trees).map((t) => t.id)).toEqual(['valley']);
+    expect(THEMES.filter((t) => t.rock.grass).map((t) => t.id)).toEqual(['valley']);
+    expect(greenish(v.rock.grass.tint)).toBe(true);
+    expect(greenish(v.rock.tint)).toBe(true); // moss on every face, not only the ledges
+    expect(v.rock.grass.from).toBeLessThan(v.rock.grass.to);
+    expect(v.rock.grass.to).toBeLessThanOrEqual(1);
   });
-
-  it('treats anything that is not a level number as level 1', () => {
-    for (const bad of [0, -3, NaN, undefined, null, 'x', Infinity]) expect(themeForLevel(bad)).toBe(THEMES[0]);
-    expect(themeForLevel(2.9)).toBe(THEMES[1]);
+  it('has a clear, cool sky over blue-green haze and mist, and a high sun', () => {
+    const fog = [(v.fog.color >> 16) & 255, (v.fog.color >> 8) & 255, v.fog.color & 255];
+    expect(fog[1]).toBeGreaterThan(fog[0]); // greener and bluer than red: not the warm canyon haze
+    expect(fog[2]).toBeGreaterThan(fog[0]);
+    expect(v.sky.turbidity).toBeLessThan(byId.golden.sky.turbidity);
+    expect(v.sky.top[2]).toBeGreaterThan(v.sky.top[0]);
+    expect(v.clouds.tint[0]).toBeLessThan(v.clouds.tint[1]); // the river mist below is blue-green, not warm
+    expect(v.sun.dir[1]).toBeGreaterThan(byId.golden.sun.dir[1]);
+    expect(v.birds).toBe(true);
+    expect(v.stars).toBe(false);
   });
 });
 

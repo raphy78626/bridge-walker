@@ -10,8 +10,8 @@ import { matchResultView } from './matchResults.js';
 import { RACE_VIEW_LABELS, windSessionOf } from './raceView.js';
 import { createAudio, createEagleScheduler } from './audio.js';
 import { createCueTracker, playCues } from './audioCues.js';
-import { themeForLevel } from './themes.js';
-import { themeForTransition, levelBanner } from './levelFlow.js';
+import { createLooks } from './looks.js';
+import { isLevelEnd, levelBanner } from './levelFlow.js';
 import { createGustTrigger, forecastOf } from './windFx.js';
 import { recordLevel, recordRun, resultView, sameResult } from './results.js';
 import { createStateSync, sessionFor, stateMessageFor } from './stateSync.js';
@@ -44,29 +44,34 @@ let net = null;
 let attempt = 0; // failed reconnects in a row, for the backoff
 // Connect before building the 3D scene, so a graphics failure can never block pairing.
 openSocket();
+const looks = createLooks(); // every level's theme and canyon, at random
 const scene = createSceneOrStub();
-// Remote profiling and play-testing over ares-inspect: sound state, the live match and its first session.
+// Remote profiling and play-testing over ares-inspect: sound state, the live match and its first session, the looks.
 if (window.__bridge) {
   Object.defineProperties(window.__bridge, {
     audio: { value: audio, configurable: true },
     match: { get: () => match, configurable: true },
     session: { get: () => match.sessions[1], configurable: true },
     links: { value: links, configurable: true },
+    looks: { value: looks, configurable: true },
   });
 }
 hud.setMode(match.mode);
-applyTheme(themeForLevel(match.level)); // level 1's look and sound
+applyLook(); // level 1's look and sound
 scene.setCamera?.(loadCameraMode());
 
-// The look (sky, fog, lighting) and the sound change together. The scene skips a theme it already shows.
-function applyTheme(theme) {
-  scene.setTheme?.(theme);
-  audio.setTheme(theme.id);
+// The look (sky, fog, lighting, the canyon's shapes) and the sound change together; the scene skips a look it already
+// shows. The look after it is got ready in the background: its canyon in the worker, its sounds in the audio engine.
+function applyLook() {
+  const { current, upcoming } = looks;
+  scene.setLook?.(current);
+  scene.prepareLook?.(upcoming);
+  audio.setTheme(current.theme.id, upcoming.theme.id);
 }
 
 function createSceneOrStub() {
   try {
-    return createScene(document.getElementById('game'));
+    return createScene(document.getElementById('game'), looks.current);
   } catch (err) {
     console.error(err); // reaches the server log via the reporter in tv.html
     return { render() {} }; // no scene: the HUD, sound and pairing still work
@@ -89,7 +94,7 @@ function dropController() {
 }
 
 // A phone sends 'mode': the old match is thrown away (the guard in matchLink.js decided that is allowed) and a fresh one
-// of that mode takes its place, in the lobby, with level 1's look.
+// of that mode takes its place, in the lobby, keeping the look on screen.
 function switchMode(mode) {
   match = newMatch(mode);
   links.setMode(mode, performance.now());
@@ -101,7 +106,6 @@ function switchMode(mode) {
   gusts.reset();
   levelPhase = flowPhase(match);
   hud.setMode(mode);
-  applyTheme(themeForLevel(match.level));
   syncResult(null);
   updatePanel();
   pushStates();
@@ -288,10 +292,13 @@ function frame(now) {
   }
   const phase = flowPhase(match);
   if (phase !== levelPhase) {
-    // Entering 'won' applies the NEXT level's theme, so the sky bake hides behind the win screen.
-    const theme = themeForTransition(levelPhase, phase, match.level);
-    if (theme) applyTheme(theme);
-    const banner = levelBanner(levelPhase, phase, match.level);
+    // A level ending (won, failed, or the match over) applies the NEXT level's look, so the sky bake and the canyon swap
+    // hide behind the results panel.
+    if (isLevelEnd(levelPhase, phase)) {
+      looks.advance();
+      applyLook();
+    }
+    const banner = levelBanner(levelPhase, phase, match.level, looks.current.theme);
     if (banner) hud.showBanner(banner);
     levelPhase = phase;
   }

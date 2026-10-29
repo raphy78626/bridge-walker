@@ -6,8 +6,9 @@ A parent & kid project for LG webOS TVs, vibe-coded together with [Claude Code](
 Hold your phone like a steering wheel and tilt to keep him upright. Hold **WALK** or **RUN**, tap **JUMP** over
 the gaps where planks are missing, and don't fall into the canyon. Watch for the **WIND** warning: every gust is
 announced a moment before it hits, so you can lean into it. Beat the par time without falling for three stars.
-Every level has a new time of day, its own soundscape, and gets a little harder: more gaps, stronger and more
-frequent gusts.
+Every level picks a new look at random (golden afternoon, misty morning, sunset, moonlit night or a lush green
+valley with pines and a river below), with its own soundscape and its own freshly shaped canyon, and gets a little
+harder: more gaps, stronger and more frequent gusts.
 
 ![Golden afternoon](docs/screenshots/golden-afternoon.jpg)
 
@@ -87,8 +88,9 @@ to type the address that `npm run tv` printed.
   because phones only share motion sensors with secure pages.
 - The TV renders the 3D scene and runs the game. The phone only sends tilt, walk, run, jump and view changes.
 - Built for a weak TV graphics chip (measured on an LG 55UR9050, PowerVR BXE-4-32, 50 Hz panel): lighting on the
-  rock is baked once instead of computed per pixel, the sky is pre-rendered per level, and resolution adapts to
-  hold ~40-45 fps. The TV reports its frame rate and any errors to the computer's terminal (`[tv]` lines).
+  rock is baked once instead of computed per pixel, the sky is pre-rendered per level, the next level's canyon is
+  built ahead in a background worker, and resolution adapts to hold ~40-45 fps. The TV reports its frame rate and
+  any errors to the computer's terminal (`[tv]` lines).
 
 ## Develop
 

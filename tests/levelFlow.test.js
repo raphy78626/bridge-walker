@@ -1,42 +1,39 @@
 import { describe, it, expect } from 'vitest';
-import { themeForTransition, levelBanner, isLevelStart } from '../src/tv/levelFlow.js';
-import { themeForLevel } from '../src/tv/themes.js';
+import { isLevelEnd, isLevelStart, levelBanner } from '../src/tv/levelFlow.js';
+import { THEMES } from '../src/tv/themes.js';
 
-describe('themeForTransition', () => {
-  it('applies the NEXT level\'s theme when the win screen appears', () => {
-    expect(themeForTransition('playing', 'won', 1).id).toBe('morning');
-    expect(themeForTransition('playing', 'won', 2).id).toBe('sunset');
-    expect(themeForTransition('playing', 'won', 3).id).toBe('night');
-    expect(themeForTransition('playing', 'won', 4).id).toBe('golden'); // wraps round
+const byId = Object.fromEntries(THEMES.map((t) => [t.id, t]));
+
+describe('isLevelEnd: when the next level\'s look goes on', () => {
+  it('on the win screen, so the bake hides behind it', () => {
+    expect(isLevelEnd('playing', 'won')).toBe(true);
   });
 
-  it('applies level 1\'s theme on gameover -> start', () => {
-    expect(themeForTransition('gameover', 'playing', 1)).toBe(themeForLevel(1));
+  it('on game over too (solo, a failed Wind Master level, the end of a match), so the next level has a new look', () => {
+    expect(isLevelEnd('falling', 'gameover')).toBe(true);
+    expect(isLevelEnd('playing', 'gameover')).toBe(true);
   });
 
-  it('re-states the current level\'s theme when a level starts (a no-op for the scene)', () => {
-    expect(themeForTransition('won', 'playing', 2)).toBe(themeForLevel(2));
-    expect(themeForTransition('lobby', 'playing', 1)).toBe(themeForLevel(1));
-  });
-
-  it('does nothing mid-play: respawns, falls, game over', () => {
-    expect(themeForTransition('falling', 'playing', 3)).toBeNull();
-    expect(themeForTransition('playing', 'falling', 3)).toBeNull();
-    expect(themeForTransition('falling', 'gameover', 3)).toBeNull();
-    expect(themeForTransition('won', 'won', 3)).toBeNull();
+  it('never mid-play, on a level start, or again while the panel stays up', () => {
+    expect(isLevelEnd('falling', 'playing')).toBe(false);
+    expect(isLevelEnd('playing', 'falling')).toBe(false);
+    expect(isLevelEnd('won', 'playing')).toBe(false);
+    expect(isLevelEnd('gameover', 'playing')).toBe(false);
+    expect(isLevelEnd('lobby', 'playing')).toBe(false);
+    expect(isLevelEnd('won', 'won')).toBe(false);
+    expect(isLevelEnd('gameover', 'gameover')).toBe(false);
   });
 });
 
 describe('levelBanner', () => {
-  it('names the level and its theme when a level starts', () => {
-    expect(levelBanner('lobby', 'playing', 1)).toBe('Level 1 — Golden Afternoon');
-    expect(levelBanner('won', 'playing', 2)).toBe('Level 2 — Misty Morning');
-    expect(levelBanner('won', 'playing', 3)).toBe('Level 3 — Sunset');
-    expect(levelBanner('gameover', 'playing', 1)).toBe('Level 1 — Golden Afternoon');
-    expect(levelBanner('won', 'playing', 4)).toBe('Level 4 — Moonlit Night');
+  it('names the level and the theme it starts with', () => {
+    expect(levelBanner('lobby', 'playing', 1, byId.golden)).toBe('Level 1 — Golden Afternoon');
+    expect(levelBanner('won', 'playing', 2, byId.valley)).toBe('Level 2 — Green Valley');
+    expect(levelBanner('won', 'playing', 3, byId.sunset)).toBe('Level 3 — Sunset');
+    expect(levelBanner('gameover', 'playing', 1, byId.night)).toBe('Level 1 — Moonlit Night');
   });
   it('stays quiet on a respawn', () => {
-    expect(levelBanner('falling', 'playing', 2)).toBeNull();
+    expect(levelBanner('falling', 'playing', 2, byId.morning)).toBeNull();
     expect(isLevelStart('playing', 'falling')).toBe(false);
   });
 });

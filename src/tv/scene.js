@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { buildEnvironment } from './environment.js';
+import { createCanyonBuilder } from './canyonBuild.js';
+import { CLASSIC_SEED } from './canyon.js';
 import { createAdaptiveQuality } from './adaptiveQuality.js';
 import { createCameraRig } from './cameraRig.js';
 import { DEFAULT_CAMERA, nextCamera, isCameraMode } from './cameras.js';
@@ -19,10 +21,11 @@ const IS_TV = /SmartTV|Web0S|NetCast|Tizen/i.test(navigator.userAgent) || new UR
 // the lights, the walker, the camera rig, the wind's look) wired together once per frame in render().
 // World layout: the walker starts at z = 0 and walks toward -z. x is right, y is up.
 //
+// `look` ({ theme, seed }, looks.js) is the first level's look: the theme the scene is built with and its canyon.
 // render(match, t) draws a match (src/game/match.js) in any mode. Solo and Wind Master are one soldier on the one bridge
 // (the Wind Master's is tinted in the walker's colour and tagged); a race is two bridges 2.4 m apart with a soldier each
 // (teal P1 on the left, orange P2 on the right), seen by a shared chase camera or one that follows either racer.
-export function createScene(canvas) {
+export function createScene(canvas, look = { theme: THEMES[0], seed: CLASSIC_SEED }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !IS_TV }); // MSAA is costly on TV GPUs
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.5; // the physical sky is bright; this keeps golden hour from blowing out
@@ -30,8 +33,10 @@ export function createScene(canvas) {
   renderer.shadowMap.type = THREE.PCFShadowMap; // r186: this is the soft filter (PCFSoftShadowMap was removed)
   const scene = new THREE.Scene();
   let gapsApplied = null; // the session builds a new gaps array per level, so a reference check says when to rebuild
-  let theme = THEMES[0]; // golden: the look the scene is built with; main.js applies the level's theme right away
-  const env = buildEnvironment(scene, renderer, { theme, lite: IS_TV }); // sky, fog, rock, bridge, clouds
+  let theme = look.theme;
+  // Each level's canyon is built ahead in a worker, so the swap on the win screen does not freeze the TV for seconds.
+  const canyons = createCanyonBuilder({ createWorker: () => new Worker(new URL('./canyonWorker.js', import.meta.url), { type: 'module' }) });
+  const env = buildEnvironment(scene, renderer, { theme, seed: look.seed, lite: IS_TV, canyons }); // sky, fog, rock, trees, bridge, clouds
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 500);
   // Wind streaks ride on the camera, so they follow whichever view is active. One mesh, one draw call, hidden when calm.
   const streaks = createWindStreaks();
@@ -50,23 +55,29 @@ export function createScene(canvas) {
   const sharedView = sharedFocusShell(() => new THREE.Vector3(), () => new THREE.Quaternion());
   // A TV has no developer tools of its own; with `ares-inspect` attached, this handle lets a remote
   // console toggle scene parts and render scale live to find what the TV's GPU struggles with.
-  window.__bridge = { THREE, renderer, scene, camera, quality: adaptQuality, setTheme };
+  window.__bridge = { THREE, renderer, scene, camera, quality: adaptQuality, setTheme, setLook, themes: THEMES };
   let lastT = null;
   let gameT = 0; // the scene's own clock: it advances by dt, which is 0 while paused, so nothing that moves with it keeps going
 
-  // Re-bakes the look for a theme (themes.js): sky cube and PMREM, fog, lights, the lite rock's vertex lighting,
-  // clouds, waterfalls, birds and stars. The bake is a one-off hitch (the sky is 6 cube faces plus PMREM), so main.js
-  // calls it on the win screen. The time is logged to the console and the server log.
-  function setTheme(next) {
-    if (!next || next.id === theme.id) return;
+  // Re-bakes the look for a level (looks.js): sky cube and PMREM, fog, lights, the canyon for the look's seed (handed over
+  // by the worker when it is ready, else built here), the rock's colours, clouds, waterfalls, trees, birds and stars. The
+  // bake is a one-off hitch (the sky is 6 cube faces plus PMREM), so main.js calls it on the win screen. The time is
+  // logged to the console and the server log.
+  function setLook(next) {
+    if (!next?.theme || (next.theme.id === theme.id && next.seed === env.seed)) return;
     const t0 = performance.now();
-    lighting.apply(next);
-    env.setTheme(next);
+    const from = `${theme.id}/${env.seed}`;
+    lighting.apply(next.theme);
+    env.setLook(next.theme, next.seed ?? env.seed);
     renderer.getContext().finish(); // wait for the GPU, so the time below is the real cost, not just the queueing
     const ms = performance.now() - t0;
-    console.log(`[theme] ${theme.id} -> ${next.id}: ${ms.toFixed(0)} ms`);
-    window.reportToServer?.('theme', `${theme.id} -> ${next.id} ${ms.toFixed(0)} ms`);
-    theme = next;
+    console.log(`[theme] ${from} -> ${next.theme.id}/${env.seed}: ${ms.toFixed(0)} ms`);
+    window.reportToServer?.('theme', `${from} -> ${next.theme.id}/${env.seed} ${ms.toFixed(0)} ms`);
+    theme = next.theme;
+  }
+  // The theme alone, on the same canyon (the remote console's handle).
+  function setTheme(next) {
+    setLook({ theme: next, seed: env.seed });
   }
 
   function resize() {
@@ -145,6 +156,11 @@ export function createScene(canvas) {
       renderer.render(scene, camera);
     },
     setTheme,
+    setLook,
+    // Starts building the canyon of a later look (looks.js's upcoming) in the background.
+    prepareLook(next) {
+      if (next) env.prepareCanyon(next.seed);
+    },
     // The solo view the player picked (chase | pov | cinematic); a race and Wind Master always use the chase camera.
     setCamera(next) {
       if (isCameraMode(next)) userCamera = next;
