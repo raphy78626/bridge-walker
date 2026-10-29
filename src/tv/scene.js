@@ -7,6 +7,8 @@ import { stepGait, clipTimeScale, WALK_ABOVE, WALK_STRIDE, RUN_STRIDE } from './
 import { jumpPose, createPose, POSE_BONES } from './jumpPose.js';
 import { THEMES } from './themes.js';
 import { BRIDGE_LENGTH } from '../game/session.js';
+import { createWindStreaks } from './windStreaks.js';
+import { CALM, easeToward, forecastOf, streakOpacity, streakSpeed, windSway } from './windFx.js';
 import { CAMERA_FOV, DEFAULT_CAMERA, createCinematic, isCameraMode, nextCamera, povCamera, stepRate } from './cameras.js';
 
 const NO_GAPS = [];
@@ -33,6 +35,15 @@ export function createScene(canvas) {
   let theme = THEMES[0]; // golden: the look the scene is built with; main.js applies the level's theme right away
   const env = buildEnvironment(scene, renderer, { theme, lite: IS_TV }); // sky, fog, rock, bridge, clouds
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 500);
+  // Wind streaks ride on the camera, so they follow whichever view is active. One mesh, one draw call, hidden when calm.
+  const streaks = createWindStreaks();
+  camera.add(streaks.mesh);
+  scene.add(camera);
+  // The smoothed look of the wind: the forecast flips between states, the picture eases between them.
+  let windOpacity = 0;
+  let windSpeed = 0;
+  let windSwayNow = 0;
+  let windDir = 1; // the last gust's direction, held while the streaks fade out
 
   // the sky's image-based light does most of the fill now; the hemisphere only lifts the shadows a little
   const hemi = new THREE.HemisphereLight();
@@ -146,6 +157,14 @@ export function createScene(canvas) {
       }
       sun.position.set(sunOffset.x, sunOffset.y, z + sunOffset.z); // shadow box follows the walker
       env.update(t, camera);
+      // Wind: ease toward what the forecast asks for, then hand it to the ropes and the streaks (no allocation here).
+      const f = forecastOf(s);
+      const calm = f === CALM || f.state === 'calm';
+      windOpacity = easeToward(windOpacity, streakOpacity(f), dt, calm ? 3 : 6);
+      windSpeed = easeToward(windSpeed, streakSpeed(f), dt, calm ? 2 : 4);
+      windSwayNow = easeToward(windSwayNow, windSway(f), dt, calm ? 2.5 : 5);
+      if (f.dir) windDir = f.dir > 0 ? 1 : -1;
+      env.setWind(windSwayNow);
       sun.target.position.set(0, 0, z);
       walker.visible = s.phase !== 'gameover' && camMode !== 'pov'; // first person: nothing may block the eye
       const lift = w.y ?? 0; // height above the planks (a jump)
@@ -197,12 +216,19 @@ export function createScene(canvas) {
         camera.lookAt(0, walker.position.y + 1, z - 0.5 * k);
       } else {
         camera.position.set(w.lean * 0.6, 2.4 + CAMERA_Y_FOLLOW * lift, z + 5);
+        if (!falling && windSwayNow * windSwayNow > 0.25) {
+          // a strong gust buffets the chase camera a little: tiny, and only above half strength
+          const shake = (Math.abs(windSwayNow) - 0.5) * 0.06;
+          camera.position.x += Math.sin(t * 37) * shake;
+          camera.position.y += Math.sin(t * 29 + 1) * shake * 0.6;
+        }
         if (falling) {
           camera.lookAt(walker.position.x, walker.position.y + 1, z - 1); // watch him drop into the clouds
         } else {
           camera.lookAt(0, 1.1 + CAMERA_Y_FOLLOW * lift, z - 8);
         }
       }
+      streaks.update(dt, windOpacity, windSpeed, windDir, camera); // after the camera's fov is settled for this view
       adaptQuality();
       renderer.render(scene, camera);
     },

@@ -4,6 +4,7 @@ import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BRIDGE_LENGTH } from '../game/session.js';
 import { mulberry32 } from '../game/rng.js';
+import { applyWindSway, createWindUniforms } from './windSway.js';
 
 const PLANK_STEP = 0.45;
 const PLANK_DEPTH = 0.32; // along the bridge
@@ -28,7 +29,8 @@ export function buildEnvironment(scene, renderer, { theme, lite = false }) {
   const clouds = buildClouds(scene.fog, lite ? 60 : 300);
   const birds = buildBirds();
   const stars = buildStars();
-  const bridge = buildBridge(aniso, lite);
+  const windU = createWindUniforms(); // shared by the ropes and the cloth markers (windSway.js)
+  const bridge = buildBridge(aniso, lite, windU);
   const parts = { cliffs, bridge: bridge.group, gate: buildGate(rock), clouds: clouds.mesh, falls: falls.group, birds: birds.points, stars: stars.points };
   for (const [name, obj] of Object.entries(parts)) obj.name = name; // names make remote profiling on the TV readable
   scene.add(...Object.values(parts));
@@ -51,7 +53,12 @@ export function buildEnvironment(scene, renderer, { theme, lite = false }) {
   setTheme(theme);
 
   return {
+    // sway: -1..1, signed like the wind's dir (+1 sways toward screen right). One uniform, no rebuild.
+    setWind(sway) {
+      windU.uWindSway.value = sway;
+    },
     update(t, camera) {
+      windU.uWindTime.value = t;
       clouds.update(t);
       falls.update(t);
       if (birds.points.visible) birds.update(t);
@@ -520,7 +527,7 @@ export function plankOverlapsGap(i, gaps) {
   return gaps.some((g) => hi > g.start && lo < g.end);
 }
 
-function buildBridge(aniso, lite) {
+function buildBridge(aniso, lite, windU) {
   const group = new THREE.Group();
   const rand = mulberry32(7);
   const count = Math.ceil(BRIDGE_LENGTH / PLANK_STEP);
@@ -540,7 +547,7 @@ function buildBridge(aniso, lite) {
     : new THREE.MeshStandardMaterial({ ...loadSet('weathered_brown_planks', aniso), roughness: 1 });
   const planks = new THREE.Mesh(mergeGeometries(boards), plankMaterial);
   planks.receiveShadow = true;
-  group.add(planks, buildRopes());
+  group.add(planks, buildRopes(windU));
 
   // Splintered stubs hang off the nearest planks beside each gap, so the missing boards read from a distance.
   function stubs(gaps) {
@@ -568,7 +575,10 @@ function buildBridge(aniso, lite) {
 
   // The camera sits behind the walker, who hides the planks just ahead of him, but the handrails stay
   // in view on both sides: a strip of red cloth tied to each rope marks both edges of a gap.
-  const markers = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xc9301f, side: THREE.DoubleSide }));
+  const markers = new THREE.Mesh(
+    new THREE.BufferGeometry(),
+    applyWindSway(new THREE.MeshBasicMaterial({ color: 0xc9301f, side: THREE.DoubleSide }), windU, 'cloth', BRIDGE_LENGTH),
+  );
   markers.name = 'gapMarkers';
   group.add(markers);
   function markerGeometry(gaps) {
@@ -628,7 +638,7 @@ function ropeTexture() {
 
 const ropeSag = (d) => 1.0 - 0.15 * Math.sin((Math.PI * d) / BRIDGE_LENGTH); // hand-rope height at d metres along
 
-function buildRopes() {
+function buildRopes(windU) {
   const sag = ropeSag;
   const tube = (x, y0, dy, radius) => {
     const points = [];
@@ -654,7 +664,7 @@ function buildRopes() {
   }
   const tex = ropeTexture();
   const mat = new THREE.MeshStandardMaterial({ map: tex, bumpMap: tex, bumpScale: 2, roughness: 0.95 });
-  return new THREE.Mesh(mergeGeometries(parts), mat);
+  return new THREE.Mesh(mergeGeometries(parts), applyWindSway(mat, windU, 'rope'));
 }
 
 // ---------- clouds ----------
