@@ -4,8 +4,9 @@
 // the jump whoosh is synthesised, and the scream and the occasional calls fall back to a synthesised voice.
 //
 // Each level theme (themes.js) has its own ambience bed and its own occasional calls (THEME_SOUNDS below).
-// setTheme(id) loads that theme's files on demand, crossfades the bed over THEME_CROSSFADE_S, and warms up
-// the next theme in the background; buffers that neither the current nor the next theme needs are dropped.
+// setTheme(id, nextId) loads that theme's files on demand, crossfades the bed over THEME_CROSSFADE_S, and warms up
+// the next level's theme (nextId; looks.js picks it ahead) in the background; buffers that neither the current nor the
+// next theme needs are dropped.
 
 import { THEMES } from './themes.js';
 import { WIND_WARNING_S } from '../game/forecast.js';
@@ -45,8 +46,9 @@ export const THEME_CROSSFADE_S = 3;
 //  layers: looped ambience files, mixed relative to each other. { file, gain, highpass?, lowpass?, gust? }.
 //          `gust` is the depth of a slow gain LFO (wind swelling); `lowpass`/`highpass` are in Hz and make a
 //          layer duller (further away) or thinner.
-//  calls:  the occasional one-shots the scheduler plays. { kind, files, gain, lowpass, send, rateJitter }.
-//          `kind` picks the synthesised stand-in if no file loaded: 'hawk' | 'bird' | 'owl'.
+//  calls:  the occasional one-shots the scheduler plays. { kind, files, gain, lowpass, send, rate?, rateJitter }.
+//          `kind` picks the synthesised stand-in if no file loaded: 'hawk' | 'bird' | 'owl'. `rate` (default 1)
+//          replays the recordings faster or slower, which makes a different-sounding bird.
 // The layer gains are tuned so every theme's bed has the same loudness (about -23 LUFS before the
 // AMBIENCE_LEVEL bus, the level of the original waterfall + wind): no theme jumps out when the level changes.
 export const THEME_SOUNDS = {
@@ -84,6 +86,17 @@ export const THEME_SOUNDS = {
     ],
     calls: { kind: 'owl', files: AUDIO_FILES.owls, gain: 0.32, lowpass: 2200, send: 0.7, rateJitter: 0.03 },
   },
+  // The green valley: a river running below (the stream close by, the waterfall low-passed and turned down into the
+  // rumble of the wider river) and songbirds in the trees all around, high-passed so they sit up in the canopy. No
+  // canyon wind. Its calls are the blackbird phrases sped up into a smaller, brighter bird, with little canyon echo.
+  valley: {
+    layers: [
+      { file: AUDIO_FILES.ambienceStream, gain: 0.55 },
+      { file: AUDIO_FILES.ambienceWater, gain: 0.42, lowpass: 650 },
+      { file: AUDIO_FILES.ambienceBirds, gain: 0.5, highpass: 1400 },
+    ],
+    calls: { kind: 'bird', files: AUDIO_FILES.birds, gain: 0.24, lowpass: 8000, send: 0.18, rate: 1.22, rateJitter: 0.1 },
+  },
 };
 
 const soundKey = (id) => (THEME_SOUNDS[id] ? id : DEFAULT_THEME);
@@ -91,7 +104,7 @@ const themeFiles = (key) => {
   const s = THEME_SOUNDS[key];
   return [...new Set([...s.layers.map((l) => l.file), ...s.calls.files])];
 };
-// The theme that follows `key` in the level cycle (only themes that have sounds).
+// The theme to warm up after `key` when the caller did not say: the next one in THEMES' order (only themes that have sounds).
 function nextThemeKey(key) {
   const ids = THEMES.map((t) => t.id).filter((id) => THEME_SOUNDS[id]);
   const at = ids.indexOf(key);
@@ -417,8 +430,7 @@ export function createAudio({
   }
 
   // Warm up the theme after `key`, one file at a time so the weak CPU is never hit by several decodes at once.
-  function preloadNext(key) {
-    const next = nextThemeKey(key);
+  function preloadNext(key, next) {
     return themeFiles(next).reduce(
       (p, file) => p.then(() => (theme === key ? loadOne(file) : undefined)),
       Promise.resolve()
@@ -441,15 +453,17 @@ export function createAudio({
     fadeOutBed(bed, 1);
   }
 
-  // Switch the level's soundscape. An unknown id gets the default theme's sound. Safe to call before the
+  // Switch the level's soundscape. An unknown id gets the default theme's sound. nextId, the theme the level after
+  // will have, is warmed up in the background (without it, the next one in THEMES' order). Safe to call before the
   // ambience has started (the theme is used when it does) and while another crossfade is running.
-  function setTheme(id) {
+  function setTheme(id, nextId) {
     const key = soundKey(id);
     if (key !== id) warnOnce('theme:' + id, `no sounds for theme "${id}", using "${DEFAULT_THEME}"`);
     theme = key;
     if (!ensureContext()) return;
+    const next = nextId && THEME_SOUNDS[nextId] ? nextId : nextThemeKey(key);
     // Drop what neither this theme nor the next one needs (a playing bed keeps its own buffers alive).
-    const keep = new Set([...themeFiles(key), ...themeFiles(nextThemeKey(key))]);
+    const keep = new Set([...themeFiles(key), ...themeFiles(next)]);
     for (const file of [...buffers.keys()]) {
       if (!keep.has(file) && !RESIDENT.has(file)) {
         buffers.delete(file);
@@ -457,7 +471,7 @@ export function createAudio({
         settled.delete(file);
       }
     }
-    loadTheme(key).then(() => preloadNext(key));
+    loadTheme(key).then(() => preloadNext(key, next));
     applyTheme();
   }
 
@@ -775,7 +789,7 @@ export function createAudio({
     }
     play(file, {
       gain: call.gain * jitter(0.15),
-      rate: jitter(call.rateJitter),
+      rate: (call.rate ?? 1) * jitter(call.rateJitter),
       lowpass: call.lowpass,
       pan,
       send: call.send,

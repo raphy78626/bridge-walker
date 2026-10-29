@@ -563,7 +563,7 @@ describe('setTheme', () => {
     expect(have).not.toContain('ambience_crickets.ogg'); // night is two themes away
     expect(have).not.toContain('owl_1.ogg');
     expect(audio.getTheme()).toBe('morning');
-    audio.setTheme('night');
+    audio.setTheme('night', 'golden');
     await flush();
     const later = Object.keys(audio.info().buffers);
     expect(later).toEqual(expect.arrayContaining(['ambience_crickets.ogg', 'owl_2.ogg', 'ambience_water.ogg'])); // night + golden
@@ -571,6 +571,22 @@ describe('setTheme', () => {
     expect(later).not.toContain('ambience_stream.ogg');
     expect(later).not.toContain('ambience_cicadas.ogg');
     expect(later).toContain('step_1.ogg'); // one-shots stay
+  });
+
+  it('warms up the next level\'s theme when it is given (looks.js picks it at random)', async () => {
+    const { audio } = setup({ fetchFn: namedFetch() });
+    await audio.unlock();
+    audio.setTheme('night', 'valley');
+    await flush();
+    const have = Object.keys(audio.info().buffers);
+    expect(have).toEqual(expect.arrayContaining(['ambience_crickets.ogg', 'ambience_stream.ogg', 'ambience_birds.ogg', 'bird_1.ogg']));
+    expect(have).not.toContain('ambience_cicadas.ogg'); // sunset is not coming
+    audio.setTheme('valley', 'sunset');
+    await flush();
+    const later = Object.keys(audio.info().buffers);
+    expect(later).toEqual(expect.arrayContaining(['ambience_stream.ogg', 'ambience_cicadas.ogg']));
+    expect(later).not.toContain('ambience_crickets.ogg');
+    expect(later).not.toContain('owl_1.ogg');
   });
 
   it('fetches each file only once while the themes cycle', async () => {
@@ -708,7 +724,7 @@ describe('missing theme files', () => {
     });
     const { audio, log } = setup({ fetchFn });
     await audio.unlock();
-    for (const id of ['morning', 'night', 'golden', 'sunset']) {
+    for (const id of ['morning', 'night', 'golden', 'sunset', 'valley']) {
       audio.setTheme(id);
       await flush();
       const before = log.oscillators;
@@ -727,6 +743,7 @@ describe('ambientCall', () => {
       morning: AUDIO_FILES.birds,
       sunset: AUDIO_FILES.eagles,
       night: AUDIO_FILES.owls,
+      valley: AUDIO_FILES.birds,
     };
     for (const id of Object.keys(expected)) {
       audio.setTheme(id);
@@ -739,6 +756,27 @@ describe('ambientCall', () => {
         expect(log.sources[n].loop).toBe(false);
       }
     }
+  });
+
+  it('the valley\'s songbird is the blackbird sped up: a smaller, brighter bird than the morning\'s', async () => {
+    const { audio, log } = setup({ fetchFn: namedFetch(), random: () => 0.5 }); // 0.5: no jitter
+    await audio.unlock();
+    const rateOf = async (id) => {
+      audio.setTheme(id);
+      await flush();
+      audio.ambientCall({ pan: 0 });
+      return log.sources.at(-1).playbackRate.value;
+    };
+    expect(await rateOf('morning')).toBe(1);
+    expect(await rateOf('valley')).toBeCloseTo(THEME_SOUNDS.valley.calls.rate);
+    expect(THEME_SOUNDS.valley.calls.rate).toBeGreaterThan(1.1);
+  });
+
+  it('the valley\'s bed is a river and birds, without the canyon wind', () => {
+    const files = layerFiles('valley');
+    expect(files).toEqual([AUDIO_FILES.ambienceBirds, AUDIO_FILES.ambienceStream, AUDIO_FILES.ambienceWater].sort());
+    expect(files).not.toContain(AUDIO_FILES.ambienceWind);
+    expect(files).not.toEqual(layerFiles('morning'));
   });
 
   it('never plays the same call twice in a row', async () => {

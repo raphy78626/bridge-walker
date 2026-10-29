@@ -4,7 +4,9 @@ Every file here is CC0 / public domain, or CC-BY with the attribution below. Eac
 mono or stereo, level-matched and encoded as OGG Vorbis (about 96 kbps); none was otherwise re-mixed except where noted.
 The jump whoosh is synthesised in `src/tv/audio.js` (Web Audio), so it has no file. The level themes (`THEME_SOUNDS` in
 `src/tv/audio.js`) also reuse `ambience_wind.ogg`, `ambience_water.ogg` and the eagle cries with extra filtering and
-lower levels (the night wind, the sunset breeze and distant waterfall, the far eagle), which need no extra files.
+lower levels (the night wind, the sunset breeze and distant waterfall, the far eagle), which need no extra files. The
+green valley's bed is `ambience_stream.ogg`, `ambience_water.ogg` low-passed into the rumble of a river, and
+`ambience_birds.ogg` high-passed; its calls are the `bird_*.ogg` phrases played about 20% faster. No new files.
 
 | File | Source | Author | Licence |
 | --- | --- | --- | --- |
