@@ -13,11 +13,16 @@ import { loadSoldier } from './soldierAsset.js';
 //     load  how the model is fetched: () => Promise<{ model, rig }>; a test passes a fake
 //   .update(w, phase, phaseTime, fallCause, input, dt, t)   puts him where the session says and animates him
 //   .setVisible(bool)
+//   .setLane(x)           moves him (and his shadow) to another bridge; the camera focus follows
+//   .setTint(color|null)  re-colours him, or back to the Soldier's own colours with null
+//   .setTag(label|null, color)   a name tag floating over his head ("P1"): one sprite, one draw call
 //   .focus   what a camera needs to follow him; the same object every frame, so reading it allocates nothing
 //   .pivot   the group in the scene
 // World layout: he starts at z = 0 and walks toward -z. x is right, y is up.
-export function createWalker(scene, { isTV = false, x = 0, tint = null, name = 'walker', load = loadSoldier } = {}) {
-  const pivot = buildPlaceholder(tint);
+export function createWalker(scene, { isTV = false, x: startX = 0, tint: startTint = null, name = 'walker', load = loadSoldier } = {}) {
+  let x = startX;
+  let tint = startTint;
+  const pivot = buildPlaceholder();
   pivot.name = name;
   // On a TV the soldier's shadow is a blob on the planks (one draw call) instead of a shadow map.
   const blob = isTV ? buildBlob() : null;
@@ -28,13 +33,17 @@ export function createWalker(scene, { isTV = false, x = 0, tint = null, name = '
   scene.add(pivot);
   const blobState = { opacity: 0, scale: 1 }; // reused every frame
   const rigState = { speed: 0, falling: false, airborne: false, vy: 0, fallTime: 0 }; // reused every frame
+  let tag = null; // the name tag's sprite, made on first use
+  let tagOn = false; // whether he should wear it (it is also hidden whenever he is)
   const focus = { w: null, x, position: pivot.position, quaternion: pivot.quaternion, pose: null, speed: 0, falling: false, gapFall: false, phaseTime: 0 };
   let rig = null; // set once the Soldier model has loaded
+  const paint = createPainter();
+  paint(pivot, tint);
 
   load().then(
     ({ model, rig: r }) => {
-      if (tint !== null) tintMaterials(model, tint);
       swapModel(pivot, model);
+      paint(pivot, tint); // repaint with the CURRENT tint: it may have changed while the model was loading
       rig = r;
     },
     (err) => console.warn('Soldier model failed to load, keeping the placeholder figure', err),
@@ -88,6 +97,10 @@ export function createWalker(scene, { isTV = false, x = 0, tint = null, name = '
         blob.material.opacity = blobState.opacity;
       }
     }
+    if (tag) {
+      tag.visible = tagOn && pivot.visible;
+      tag.position.set(pivot.position.x, pivot.position.y + TAG_HEIGHT, z);
+    }
     focus.w = w;
     focus.pose = rig ? rig.pose : null;
     focus.speed = speed;
@@ -99,13 +112,82 @@ export function createWalker(scene, { isTV = false, x = 0, tint = null, name = '
   function setVisible(visible) {
     pivot.visible = visible;
     if (!visible && blob) blob.visible = false;
+    if (tag) tag.visible = tagOn && visible;
   }
 
-  return { pivot, focus, update, setVisible };
+  function setLane(next) {
+    x = next;
+    focus.x = next;
+    if (blob) blob.position.x = next;
+  }
+
+  function setTint(next) {
+    if (next === tint) return;
+    tint = next;
+    paint(pivot, tint);
+  }
+
+  function setTag(label, color) {
+    tagOn = !!label;
+    if (!label) {
+      if (tag) tag.visible = false;
+      return;
+    }
+    if (!tag) {
+      tag = buildTag();
+      scene.add(tag);
+    }
+    paintTag(tag, label, color);
+    tag.visible = pivot.visible;
+  }
+
+  return { pivot, focus, update, setVisible, setLane, setTint, setTag };
+}
+
+const TINT_GLOW = 0.07; // how much of the tint colour a tinted soldier gives off on his own
+const TAG_HEIGHT = 2.2; // m above his feet (the pivot): over his head, clear of the arms-out balance pose
+const TAG_SIZE = 0.085; // of the screen's height, whatever his distance: it must read from the sofa for the far soldier too
+
+// A "P1" disc over a soldier's head: a camera-facing sprite (one draw call, no lights, no fog). Its canvas texture is
+// redrawn only when the label or colour changes.
+function buildTag() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, fog: false, toneMapped: false, transparent: true, sizeAttenuation: false, depthTest: false }));
+  sprite.scale.set(TAG_SIZE, TAG_SIZE, 1);
+  sprite.renderOrder = 10;
+  sprite.userData = { canvas, texture, label: null, color: null };
+  return sprite;
+}
+
+function paintTag(sprite, label, color) {
+  const u = sprite.userData;
+  if (u.label === label && u.color === color) return;
+  u.label = label;
+  u.color = color;
+  const ctx = u.canvas.getContext('2d');
+  ctx.clearRect(0, 0, 128, 128);
+  ctx.beginPath();
+  ctx.arc(64, 64, 58, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+  ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 62px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = 4;
+  ctx.fillText(label, 64, 70);
+  u.texture.needsUpdate = true;
 }
 
 // Simple figure with arms out for balance. The group's origin is at the feet so it pivots there.
-function buildPlaceholder(tint) {
+function buildPlaceholder() {
   const g = new THREE.Group();
   const cloth = new THREE.MeshStandardMaterial({ color: 0x4a5560 });
   const skin = new THREE.MeshStandardMaterial({ color: 0xc9946b });
@@ -123,24 +205,41 @@ function buildPlaceholder(tint) {
   backpack.position.set(0, 1.3, 0.24); // +z faces the camera, so the pack is visible from behind
   g.add(legs, torso, head, arms, backpack);
   g.traverse((o) => (o.castShadow = true));
-  if (tint !== null) tintMaterials(g, tint);
   return g;
 }
 
-// Gives every mesh under `root` its own copy of its material with the colour multiplied by `tint`. Copies, because the
-// Soldier's materials are shared with the cached model and with every other walker.
-function tintMaterials(root, tint) {
-  const color = new THREE.Color(tint);
-  const copies = new Map(); // a material used by several meshes is copied once
-  root.traverse((o) => {
-    if (!o.isMesh) return;
-    if (!copies.has(o.material)) {
-      const copy = o.material.clone();
-      copy.color.multiply(color);
-      copies.set(o.material, copy);
+// Paints every mesh under `root` with its material multiplied by a colour, and back to the plain material with null.
+// The Soldier's materials are shared with the cached model and with every other walker, so a tint goes on COPIES (one per
+// original material, made on demand), and the original is kept on the mesh (userData.baseMaterial) to restore. Calling the
+// painter again with another colour throws the old copies away.
+function createPainter() {
+  let copies = new Map(); // a material used by several meshes is copied once
+  let current;
+  return (root, tint) => {
+    if (tint !== current) {
+      for (const copy of copies.values()) copy.dispose();
+      copies = new Map();
+      current = tint;
     }
-    o.material = copies.get(o.material);
-  });
+    const color = tint === null ? null : new THREE.Color(tint);
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      const base = (o.userData.baseMaterial ??= o.material);
+      if (color === null) {
+        o.material = base;
+        return;
+      }
+      if (!copies.has(base)) {
+        const copy = base.clone();
+        copy.color.multiply(color);
+        // The Soldier's camouflage is dark, and a multiply only makes it darker: a little light of the player's own colour
+        // keeps teal and orange readable in the shade too.
+        if (copy.emissive) copy.emissive.copy(color).multiplyScalar(TINT_GLOW);
+        copies.set(base, copy);
+      }
+      o.material = copies.get(base);
+    });
+  };
 }
 
 // Swaps the Soldier into the pivot, replacing the placeholder figure.
@@ -148,6 +247,7 @@ function swapModel(pivot, model) {
   pivot.traverse((o) => {
     o.geometry?.dispose();
     o.material?.dispose();
+    o.userData.baseMaterial?.dispose();
   });
   pivot.clear();
   pivot.add(model);

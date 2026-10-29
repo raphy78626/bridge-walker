@@ -4,6 +4,7 @@
 // three views: 'shared' (both bridges in frame, centred between the two soldiers) and 'p1' / 'p2' (the usual chase
 // camera on one of them). First person and the cinematic are solo views.
 import { forecastOf, windRamp } from './windFx.js';
+import { PLAYER_COLORS } from '../shared/players.js';
 
 export const LANE_X = { 1: -1.2, 2: 1.2 }; // world x of each player's bridge; 2.4 m apart, centred on the old single bridge
 export const RACE_BRIDGES = [LANE_X[1], LANE_X[2]];
@@ -20,14 +21,14 @@ export const nextRaceView = (view) => RACE_VIEWS[(isRaceView(view) ? RACE_VIEWS.
 // to its usual 5 / 2.4 / 8 / 1.1 for a single walker). The camera stays behind the player who is further back, so
 // neither racer ever drops out of frame, and rises with the gap between them.
 export const SHARED_CAM = {
-  back: 6.5, // m behind the midpoint when they run level
+  back: 7, // m behind the midpoint when they run level
   up: 3.4, // m above the planks
   perMetreBack: 0.5, // behind the midpoint by half the gap between them, so the laggard is still in front of the lens
-  perMetreUp: 0.1,
+  perMetreUp: 0.1, // and higher, so the laggard fits under the leader in frame
   maxUp: 9,
-  aim: 7, // m ahead of the midpoint the camera looks at
+  aim: 6, // m ahead of the midpoint the camera looks at when they run level (a chase view)...
+  perMetreAim: -0.25, // ...and less as they spread, down to the midpoint itself: the laggard is close and low, the leader far
   aimY: 0.9,
-  perMetreAim: 0.25,
 };
 
 // What a camera follows when the view is shared: the midpoint between the two walkers' focuses, in the shape
@@ -59,7 +60,7 @@ export function sharedFocus(out, a, b) {
   out.position.z = -out.w.z;
   out.back = SHARED_CAM.back + SHARED_CAM.perMetreBack * gap;
   out.up = Math.min(SHARED_CAM.maxUp, SHARED_CAM.up + SHARED_CAM.perMetreUp * gap);
-  out.aim = SHARED_CAM.aim + SHARED_CAM.perMetreAim * gap;
+  out.aim = Math.max(0, SHARED_CAM.aim + SHARED_CAM.perMetreAim * gap);
   return out;
 }
 
@@ -75,3 +76,12 @@ export function windSessionOf(sessions, view) {
 // How the race's two soldiers should be drawn this frame: a session that was halted (the round's loser, frozen where he
 // stands) must stand still, not keep walking on the spot, so the walker is told it is no longer playing.
 export const walkerPhaseOf = (session) => (session.halted && session.phase === 'playing' ? 'halted' : session.phase);
+
+// A colour mixed toward white by (1 - k), as a number: the Soldier's materials are multiplied by it, so the soldier is
+// recognisably his player's colour without losing his own shading and camouflage. k = 1 is the pure colour.
+export function softTint(hex, k = 0.6) {
+  const c = typeof hex === 'string' ? parseInt(hex.slice(1), 16) : hex;
+  const mix = (v) => Math.round(255 * (1 - k) + v * k);
+  return (mix((c >> 16) & 255) << 16) | (mix((c >> 8) & 255) << 8) | mix(c & 255);
+}
+export const PLAYER_TINTS = { 1: softTint(PLAYER_COLORS[1]), 2: softTint(PLAYER_COLORS[2]) };

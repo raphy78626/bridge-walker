@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { plankOverlapsGap } from '../src/tv/environment.js';
+import { plankOverlapsGap, gateHalfSpan } from '../src/tv/environment.js';
 
 // Planks sit every 0.45 m and are 0.32 m deep, so plank i covers [0.45 i - 0.16, 0.45 i + 0.16] metres along the bridge.
 describe('bridge gaps', () => {
@@ -24,5 +24,17 @@ describe('bridge gaps', () => {
     expect(plankOverlapsGap(12, gaps)).toBe(true); // 5.4 m
     expect(plankOverlapsGap(67, gaps)).toBe(true); // 30.15 m
     expect(plankOverlapsGap(40, gaps)).toBe(false);
+  });
+});
+
+describe('the gate at the far end', () => {
+  it('keeps its old posts, 1.6 m either side, for the single bridge', () => {
+    expect(gateHalfSpan([0])).toBeCloseTo(1.6);
+  });
+
+  it('stands clear of both bridges of a race: 0.95 m outside the outer hand rope', () => {
+    const half = gateHalfSpan([-1.2, 1.2]);
+    expect(half).toBeCloseTo(1.2 + 0.65 + 0.95);
+    expect(half - 0.4).toBeGreaterThan(1.2 + 0.65); // the post's inner face is outside the hand rope
   });
 });

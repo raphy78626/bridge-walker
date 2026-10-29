@@ -147,3 +147,16 @@ describe('cinematic view', () => {
     expect(lookAt()[0]).toBeCloseTo(5);
   });
 });
+
+describe('chase view with a shared focus', () => {
+  it('uses the usual spot without the extras, and the focus\'s own back / up / aim with them', () => {
+    const { camera, rig } = rigWithCamera();
+    const lookAt = aim(camera);
+    rig.update(focusOf(), 0, 0.016, 0);
+    expect(camera.position.toArray()).toEqual([0, 2.4, -10 + 5]);
+    expect(lookAt()).toEqual([0, 1.1, -10 - 8]);
+    rig.update(focusOf({ back: 12, up: 5, aim: 6, aimY: 0.5 }), 0, 0.016, 0.016);
+    expect(camera.position.toArray()).toEqual([0, 5, -10 + 12]);
+    expect(lookAt()).toEqual([0, 0.5, -10 - 6]);
+  });
+});

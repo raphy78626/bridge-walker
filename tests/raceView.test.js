@@ -50,6 +50,13 @@ describe('shared camera focus', () => {
     }
   });
 
+  it('looks ahead like a chase camera when level, and at the midpoint when they are far apart', () => {
+    const aimAt = (gap) => sharedFocus(sharedFocusShell(), focus(10, LANE_X[1]), focus(10 + gap, LANE_X[2])).aim;
+    expect(aimAt(0)).toBe(SHARED_CAM.aim);
+    expect(aimAt(8)).toBeLessThan(aimAt(0));
+    expect(aimAt(40)).toBe(0);
+  });
+
   it('never rises past the cap', () => {
     expect(sharedFocus(sharedFocusShell(), focus(0, 0), focus(60, 0)).up).toBeLessThanOrEqual(SHARED_CAM.maxUp);
   });

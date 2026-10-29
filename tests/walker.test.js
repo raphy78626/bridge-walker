@@ -202,3 +202,103 @@ describe('two walkers', () => {
     expect(a.focus).not.toBe(b.focus);
   });
 });
+
+// A canvas that draws nothing: the blob shadow and the name tag paint into one.
+const ctx = new Proxy({}, { get: (_, key) => (key === 'createRadialGradient' ? () => ({ addColorStop() {} }) : () => {}), set: () => true });
+const withDocument = (fn) => {
+  vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) });
+  try {
+    fn();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+};
+
+describe('changing a walker between rounds', () => {
+  it('setLane moves him, his shadow and his camera focus to another bridge', () => {
+    withDocument(() => {
+      const scene = new THREE.Scene();
+      const walker = createWalker(scene, { isTV: true, load: never });
+      walker.setLane(-1.2);
+      walker.update(walk(), 'playing', 0, null, IN, 0.016, 0);
+      expect(walker.pivot.position.x).toBe(-1.2);
+      expect(walker.focus.x).toBe(-1.2);
+      const blob = scene.children.find((o) => o !== walker.pivot);
+      expect(blob.position.x).toBe(-1.2);
+      walker.setLane(0);
+      walker.update(walk(), 'playing', 0, null, IN, 0.016, 0);
+      expect(walker.pivot.position.x).toBe(0);
+    });
+  });
+
+  it('setTint paints him, and null gives the Soldier\'s own colours back, on the model as well as the placeholder', async () => {
+    const shared = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    const model = new THREE.Group();
+    model.add(new THREE.Mesh(new THREE.BoxGeometry(), shared));
+    const walker = createWalker(new THREE.Scene(), { load: () => Promise.resolve({ model, rig: fakeRig() }) });
+    const firstColor = () => {
+      let c = null;
+      walker.pivot.traverse((o) => {
+        if (o.isMesh && c === null) c = o.material.color.getHex();
+      });
+      return c;
+    };
+    await settle();
+    expect(firstColor()).toBe(0xffffff);
+    walker.setTint(0x00ff00);
+    expect(firstColor()).toBe(0x00ff00);
+    walker.setTint(0xff8000);
+    expect(firstColor()).toBe(0xff8000);
+    walker.setTint(null);
+    expect(firstColor()).toBe(0xffffff);
+    expect(shared.color.getHex()).toBe(0xffffff);
+  });
+
+  it('a tint chosen while the model is still loading is the one it gets', async () => {
+    let arrive;
+    const model = new THREE.Group();
+    model.add(new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial({ color: 0xffffff })));
+    const walker = createWalker(new THREE.Scene(), { tint: 0xff0000, load: () => new Promise((r) => (arrive = r)) });
+    walker.setTint(0x0000ff);
+    arrive({ model, rig: fakeRig() });
+    await settle();
+    expect(walker.pivot.children[0].children[0].material.color.getHex()).toBe(0x0000ff);
+  });
+});
+
+describe('the name tag', () => {
+  it('is one sprite in the scene, floating over his head and following him', () => {
+    withDocument(() => {
+      const scene = new THREE.Scene();
+      const walker = createWalker(scene, { x: 1.2, load: never });
+      const before = scene.children.length;
+      walker.setTag('P2', '#f5882f');
+      expect(scene.children.length).toBe(before + 1);
+      walker.setTag('P2', '#f5882f'); // again: still one
+      expect(scene.children.length).toBe(before + 1);
+      walker.update(walk({ z: 12 }), 'playing', 0, null, IN, 0.016, 0);
+      const tag = scene.children.find((o) => o.isSprite);
+      expect(tag.position.x).toBe(1.2);
+      expect(tag.position.z).toBe(-12);
+      expect(tag.position.y).toBeGreaterThan(walker.pivot.position.y + 2);
+      expect(tag.visible).toBe(true);
+    });
+  });
+
+  it('hides with the walker and when cleared', () => {
+    withDocument(() => {
+      const scene = new THREE.Scene();
+      const walker = createWalker(scene, { load: never });
+      walker.setTag('P1', '#19b5a5');
+      const tag = scene.children.find((o) => o.isSprite);
+      walker.setVisible(false);
+      expect(tag.visible).toBe(false);
+      walker.setVisible(true);
+      expect(tag.visible).toBe(true);
+      walker.setTag(null);
+      expect(tag.visible).toBe(false);
+      walker.setTag(null); // clearing a walker that never had one is fine
+      expect(() => createWalker(scene, { load: never }).setTag(null)).not.toThrow();
+    });
+  });
+});

@@ -32,7 +32,8 @@ export function buildEnvironment(scene, renderer, { theme, lite = false }) {
   const stars = buildStars();
   const windU = createWindUniforms(); // shared by the ropes and the cloth markers (windSway.js)
   const bridge = buildBridge(aniso, lite, windU);
-  const parts = { cliffs, bridge: bridge.group, gate: buildGate(rock), clouds: clouds.mesh, falls: falls.group, birds: birds.points, stars: stars.points };
+  const gate = buildGate(rock);
+  const parts = { cliffs, bridge: bridge.group, gate: gate.mesh, clouds: clouds.mesh, falls: falls.group, birds: birds.points, stars: stars.points };
   for (const [name, obj] of Object.entries(parts)) obj.name = name; // names make remote profiling on the TV readable
   scene.add(...Object.values(parts));
 
@@ -65,8 +66,15 @@ export function buildEnvironment(scene, renderer, { theme, lite = false }) {
       if (birds.points.visible) birds.update(t);
       if (stars.points.visible && camera) stars.points.position.copy(camera.position);
     },
-    // gaps: [{ start, end }] in metres along the bridge. Rebuilds the planks without the boards over them.
+    // gaps: [{ start, end }] in metres along the bridge. Rebuilds the planks without the boards over them, on every bridge.
     setGaps: bridge.setGaps,
+    // xs: the world x of each bridge, [0] for the usual single one, [-1.2, 1.2] for a race. All bridges are copies of one
+    // (the same gaps, ropes and cloth markers, and the same sway), merged into the same three meshes, so a second bridge
+    // costs no extra draw call. The gate at the far end widens to stand clear of them.
+    setBridges(xs) {
+      if (!bridge.setOffsets(xs)) return;
+      gate.setSpan(gateHalfSpan(xs));
+    },
     setTheme,
   };
 }
@@ -608,18 +616,38 @@ function worldBox(w, h, d, x, y, z) {
   return g;
 }
 
+const HAND_ROPE_X = 0.65; // the hand ropes of a bridge stand this far either side of its middle
+
+// Where the gate's two posts stand (their centres, either side of the middle) for bridges at these offsets: 0.95 m outside
+// the outermost hand rope, which for the single bridge is the 1.6 m the gate was built with.
+export function gateHalfSpan(xs) {
+  return Math.max(...xs.map(Math.abs)) + HAND_ROPE_X + 0.95;
+}
+
+function gateGeometry(half) {
+  return mergeGeometries([
+    worldBox(0.8, 5, 0.8, -half, 2.5, 0),
+    worldBox(0.8, 5, 0.8, half, 2.5, 0),
+    worldBox(2 * half + 1.2, 0.9, 1, 0, 5.2, 0),
+  ]);
+}
+
 function buildGate(rock) {
   const mat = rock.clone(); // same textures, no baked vertex colours on the boxes
   mat.vertexColors = false;
   mat.color.set(0xd8c4ac);
-  const geo = mergeGeometries([
-    worldBox(0.8, 5, 0.8, -1.6, 2.5, 0),
-    worldBox(0.8, 5, 0.8, 1.6, 2.5, 0),
-    worldBox(4.4, 0.9, 1, 0, 5.2, 0),
-  ]);
-  const gate = new THREE.Mesh(geo, mat);
-  gate.position.z = -BRIDGE_LENGTH - 3;
-  return gate;
+  let span = gateHalfSpan([0]);
+  const mesh = new THREE.Mesh(gateGeometry(span), mat);
+  mesh.position.z = -BRIDGE_LENGTH - 3;
+  return {
+    mesh,
+    setSpan(half) {
+      if (half === span) return;
+      span = half;
+      mesh.geometry.dispose();
+      mesh.geometry = gateGeometry(half);
+    },
+  };
 }
 
 // ---------- bridge ----------
@@ -661,7 +689,13 @@ function buildBridge(aniso, lite, windU) {
     : new THREE.MeshStandardMaterial({ ...loadSet('weathered_brown_planks', aniso), roughness: 1 });
   const planks = new THREE.Mesh(mergeGeometries(boards), plankMaterial);
   planks.receiveShadow = true;
-  group.add(planks, buildRopes(windU));
+  const ropes = buildRopes(windU);
+  const ropeBase = ropes.geometry; // one bridge's ropes at x = 0, kept: a wider layout is built from copies of it
+  group.add(planks, ropes);
+  let offsets = [0]; // the world x of each bridge
+
+  // The geometries of one bridge, copied to every bridge's offset and merged into one. A bridge at x = 0 is used as it is.
+  const atOffsets = (list) => mergeGeometries(offsets.flatMap((x) => (x === 0 ? list : list.map((g) => g.clone().translate(x, 0, 0)))));
 
   // Splintered stubs hang off the nearest planks beside each gap, so the missing boards read from a distance.
   function stubs(gaps) {
@@ -706,21 +740,33 @@ function buildBridge(aniso, lite, windU) {
         }
       }
     }
-    return out.length ? mergeGeometries(out) : new THREE.BufferGeometry();
+    return out.length ? atOffsets(out) : new THREE.BufferGeometry();
   }
 
   let applied = null;
+  function rebuild(gaps) {
+    const keep = boards.filter((_, i) => !plankOverlapsGap(i, gaps));
+    const next = atOffsets([...keep, ...stubs(gaps)]);
+    planks.geometry.dispose();
+    planks.geometry = next;
+    markers.geometry.dispose();
+    markers.geometry = markerGeometry(gaps);
+  }
   return {
     group,
     setGaps(gaps) {
       if (gaps === applied) return;
       applied = gaps;
-      const keep = boards.filter((_, i) => !plankOverlapsGap(i, gaps));
-      const next = mergeGeometries([...keep, ...stubs(gaps)]);
-      planks.geometry.dispose();
-      planks.geometry = next;
-      markers.geometry.dispose();
-      markers.geometry = markerGeometry(gaps);
+      rebuild(gaps);
+    },
+    // Moves to bridges at these x offsets. False when they are the ones already built.
+    setOffsets(xs) {
+      if (xs.length === offsets.length && xs.every((x, i) => x === offsets[i])) return false;
+      offsets = [...xs];
+      if (ropes.geometry !== ropeBase) ropes.geometry.dispose();
+      ropes.geometry = offsets.length === 1 && offsets[0] === 0 ? ropeBase : atOffsets([ropeBase]);
+      rebuild(applied ?? []);
+      return true;
     },
   };
 }
