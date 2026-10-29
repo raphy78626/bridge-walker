@@ -3,10 +3,21 @@ import { createTiltReader } from './tilt.js';
 import { createGustTrigger, strengthOfLevel, windIndicator } from '../tv/windFx.js'; // pure helpers, no three.js
 import { statusText, viewOf, startLabel, keepMovingFor, createKeepMovingBuzz } from './status.js';
 import { PLAYER_COLORS } from '../shared/players.js';
+import { phoneId } from './identity.js';
 import { GUST_COOLDOWN_S, CONTROLLED_GUST_S } from '../game/wind.js';
 import { WIND_WARNING_S } from '../game/forecast.js';
 
 const SIGN_KEY = 'bridge.tiltSign';
+
+// This phone's identity for the page's life (and the tab's, through sessionStorage): a reconnect with it takes the old slot back.
+function sessionStore() {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null; // blocked: the id then lasts as long as this page does
+  }
+}
+const PHONE_ID = phoneId(sessionStore());
 
 const gusts = createGustTrigger();
 const keepMovingBuzz = createKeepMovingBuzz();
@@ -84,7 +95,7 @@ $('btn-connect').addEventListener('click', async () => {
   }
   navigator.wakeLock?.request('screen').catch(() => {});
   dropSocket();
-  const conn = connect(onMessage, () => conn.send({ t: 'join', role: 'phone', room }));
+  const conn = connect(onMessage, () => conn.send({ t: 'join', role: 'phone', room, id: PHONE_ID }));
   net = conn;
   conn.ws.addEventListener('close', () => {
     if (net !== conn) return; // closed on purpose, UI already handled

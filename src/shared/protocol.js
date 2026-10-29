@@ -1,4 +1,5 @@
 // Every message is a small JSON object with a type field `t`.
+// phone → server: join {role: 'phone', room, id?} (id: the phone's stable identity, 1-64 of A-Za-z0-9_-).
 // phone → tv: tilt {v}, walk {on}, run {on}, jump, camera (cycle the view), pause (toggle), volume {music, sfx}, start,
 //             gust {dir: -1|1} (the Wind Master), mode {mode: 'solo'|'race'|'windmaster'}.
 //             The server stamps every one of these with p: 1|2, the sender's player slot (whatever the client sent is overwritten).
@@ -15,6 +16,10 @@ export const MODES = ['solo', 'race', 'windmaster'];
 const unit = (v) => Math.max(0, Math.min(1, v));
 const SERVER_TYPES = new Set(['room', 'paired', 'peer-left', 'error']);
 const ROOM_RE = /^[A-Z]{4}$/;
+// A phone's stable identity: it makes one up the first time and keeps it for the tab's life, and sends it in its join. A
+// phone that reconnects with the id that holds a slot takes that slot (same player number) instead of being turned away.
+const PHONE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+export const isValidPhoneId = (id) => typeof id === 'string' && PHONE_ID_RE.test(id);
 
 export const encode = (msg) => JSON.stringify(msg);
 
@@ -39,7 +44,9 @@ function decodeMessage(msg) {
       if (msg.role === 'tv') return { t: 'join', role: 'tv' };
       if (msg.role === 'phone') {
         // A bad code still gets through, as '', so rooms.join answers {t:'error', reason:'no-room'} instead of silence.
-        return { t: 'join', role: 'phone', room: typeof msg.room === 'string' && ROOM_RE.test(msg.room) ? msg.room : '' };
+        const join = { t: 'join', role: 'phone', room: typeof msg.room === 'string' && ROOM_RE.test(msg.room) ? msg.room : '' };
+        if (isValidPhoneId(msg.id)) join.id = msg.id; // an invalid id is dropped: the join goes ahead as an anonymous phone
+        return join;
       }
       return null;
     case 'tilt':

@@ -4,7 +4,7 @@ const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I or O: easy to read off a TV
 const SLOTS = [1, 2]; // player numbers; a phone takes the lowest free one
 
 export function createRooms() {
-  const rooms = new Map(); // code -> { tv, phones: { 1: socket|null, 2: socket|null } }
+  const rooms = new Map(); // code -> { tv, phones: { 1: socket|null, 2: socket|null }, ids: { 1: id|null, 2: id|null } }
   const members = new Map(); // socket -> { code, role, player? }
 
   const send = (sock, msg) => sock?.send(encode(msg));
@@ -21,7 +21,7 @@ export function createRooms() {
     if (members.has(sock)) leave(sock); // re-join: clean up the old membership first
     if (msg.role === 'tv') {
       const code = newCode();
-      rooms.set(code, { tv: sock, phones: { 1: null, 2: null } });
+      rooms.set(code, { tv: sock, phones: { 1: null, 2: null }, ids: { 1: null, 2: null } });
       members.set(sock, { code, role: 'tv' });
       send(sock, { t: 'room', room: code });
       return;
@@ -31,12 +31,23 @@ export function createRooms() {
       send(sock, { t: 'error', reason: 'no-room' });
       return;
     }
-    const player = SLOTS.find((n) => !room.phones[n]);
+    // A phone that comes back with the id holding a slot takes that very slot over, even while the old socket still lingers
+    // (a dead Wi-Fi link is only noticed by the heartbeat, many seconds later): same player number, the old socket closed
+    // quietly (it is forgotten first, so its close event tells the TV nothing). Without an id, or an unknown one, the lowest
+    // free slot, as ever.
+    const held = msg.id ? SLOTS.find((n) => room.phones[n] && room.ids[n] === msg.id) : undefined;
+    const player = held ?? SLOTS.find((n) => !room.phones[n]);
     if (!player) {
       send(sock, { t: 'error', reason: 'room-full' });
       return;
     }
+    if (held) {
+      const old = room.phones[held];
+      members.delete(old);
+      old.close?.();
+    }
     room.phones[player] = sock;
+    room.ids[player] = msg.id ?? null;
     members.set(sock, { code: msg.room, role: 'phone', player });
     send(room.tv, { t: 'paired', player });
     send(sock, { t: 'paired', player });
@@ -75,6 +86,7 @@ export function createRooms() {
       }
     } else {
       room.phones[who.player] = null;
+      room.ids[who.player] = null;
       send(room.tv, { t: 'peer-left', player: who.player });
     }
   }

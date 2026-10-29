@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createServer, request } from 'node:http';
 import { once } from 'node:events';
 import WebSocket from 'ws';
@@ -154,6 +154,35 @@ describe('relay', () => {
     const [, next3] = await join();
     expect(await next3()).toEqual({ t: 'error', reason: 'room-full' });
     void p1;
+  });
+
+  it('a phone that reconnects with its id while the old socket still holds the slot takes it over (no room-full, no peer-left)', async () => {
+    await start();
+    const tv = await connect(tvPort);
+    const tvMsgs = [];
+    tv.on('message', (d) => tvMsgs.push(JSON.parse(d.toString())));
+    tv.send(JSON.stringify({ t: 'join', role: 'tv' }));
+    await vi.waitFor(() => expect(tvMsgs.length).toBe(1));
+    const { room } = tvMsgs[0];
+    const join = async (id) => {
+      const ws = await connect(mainPort);
+      const got = [];
+      ws.on('message', (d) => got.push(JSON.parse(d.toString())));
+      ws.send(JSON.stringify({ t: 'join', role: 'phone', room, id }));
+      return { ws, got };
+    };
+    const first = await join('phone-one_A');
+    const second = await join('phone-two_B');
+    await vi.waitFor(() => expect(tvMsgs.filter((m) => m.t === 'paired').length).toBe(2));
+    // phone one's link dies (the socket stays open server-side); it reconnects with its id
+    const closed = once(first.ws, 'close');
+    const again = await join('phone-one_A');
+    await vi.waitFor(() => expect(again.got).toEqual([{ t: 'paired', player: 1 }]));
+    await closed; // the old socket was closed by the server
+    again.ws.send(JSON.stringify({ t: 'tilt', v: 0.25 }));
+    await vi.waitFor(() => expect(tvMsgs.at(-1)).toEqual({ t: 'tilt', v: 0.25, p: 1 }));
+    expect(tvMsgs.some((m) => m.t === 'peer-left')).toBe(false);
+    expect(second.got).toEqual([{ t: 'paired', player: 2 }]); // player 2 never noticed
   });
 
   it('answers no-room to a phone with a malformed room code', async () => {

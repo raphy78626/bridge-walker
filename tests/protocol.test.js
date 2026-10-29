@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { encode, decode, RELAYED } from '../src/shared/protocol.js';
+import { encode, decode, RELAYED, isValidPhoneId } from '../src/shared/protocol.js';
 
 describe('protocol', () => {
   it('round-trips a tilt message', () => {
@@ -30,6 +30,35 @@ describe('protocol', () => {
     expect(decode(encode({ t: 'join', role: 'phone' }))).toEqual(noRoom);
     expect(decode(encode({ t: 'join', role: 'phone', room: ['ABCD'] }))).toEqual(noRoom);
     expect(decode(encode({ t: 'join', role: 'phone', room: 'ABCDE' }))).toEqual(noRoom);
+  });
+
+  describe('a phone\'s stable id', () => {
+    const join = (id) => decode(encode({ t: 'join', role: 'phone', room: 'ABCD', id }));
+    it('passes a valid id (1-64 of A-Z a-z 0-9 _ -) through', () => {
+      for (const id of ['a', 'Z9_-', 'x'.repeat(64), '3f2b1c9e-8d4a-4b7e-9a10-0c5d6e7f8a9b']) {
+        expect(join(id)).toEqual({ t: 'join', role: 'phone', room: 'ABCD', id });
+      }
+    });
+    it('drops an invalid id, and the join goes on without one (today\'s behaviour)', () => {
+      for (const id of ['', 'x'.repeat(65), 'has space', 'semi;colon', 'ünï', '../x', 'a.b', 12, null, ['a'], { a: 1 }, true]) {
+        expect(join(id), JSON.stringify(id)).toEqual({ t: 'join', role: 'phone', room: 'ABCD' });
+      }
+    });
+    it('a join with no id has none', () => {
+      expect(decode(encode({ t: 'join', role: 'phone', room: 'ABCD' }))).toEqual({ t: 'join', role: 'phone', room: 'ABCD' });
+    });
+    it('keeps the id even with a bad room (rooms.join answers no-room)', () => {
+      expect(decode(encode({ t: 'join', role: 'phone', room: 'x', id: 'abc' }))).toEqual({ t: 'join', role: 'phone', room: '', id: 'abc' });
+    });
+    it('a TV join has no id', () => {
+      expect(decode(encode({ t: 'join', role: 'tv', id: 'abc' }))).toEqual({ t: 'join', role: 'tv' });
+    });
+    it('exports the id rule', () => {
+      expect(isValidPhoneId('abc_DEF-123')).toBe(true);
+      expect(isValidPhoneId('')).toBe(false);
+      expect(isValidPhoneId('a'.repeat(65))).toBe(false);
+      expect(isValidPhoneId(5)).toBe(false);
+    });
   });
 
   it('rejects a join with an unknown role', () => {
