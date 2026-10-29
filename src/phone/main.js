@@ -1,7 +1,7 @@
 import { connect } from '../shared/client.js';
 import { createTiltReader } from './tilt.js';
 import { createGustTrigger, strengthOfLevel, windIndicator } from '../tv/windFx.js'; // pure helpers, no three.js
-import { statusText, viewOf, startLabel } from './status.js';
+import { statusText, viewOf, startLabel, keepMovingFor, createKeepMovingBuzz } from './status.js';
 import { PLAYER_COLORS } from '../shared/players.js';
 import { GUST_COOLDOWN_S, CONTROLLED_GUST_S } from '../game/wind.js';
 import { WIND_WARNING_S } from '../game/forecast.js';
@@ -9,6 +9,7 @@ import { WIND_WARNING_S } from '../game/forecast.js';
 const SIGN_KEY = 'bridge.tiltSign';
 
 const gusts = createGustTrigger();
+const keepMovingBuzz = createKeepMovingBuzz();
 const $ = (id) => document.getElementById(id);
 const room = (new URLSearchParams(location.search).get('room') ?? '').toUpperCase();
 const tilt = createTiltReader();
@@ -113,6 +114,9 @@ function onMessage(msg) {
     showBadge(me);
     showRole(view);
     $('status').textContent = statusText(msg, me);
+    const keepMoving = keepMovingFor(msg, me);
+    $('status').classList.toggle('keep-moving', keepMoving); // a red, pulsing line
+    if (keepMovingBuzz.update(keepMoving)) navigator.vibrate?.(60); // once per onset
     showWind(msg);
     $('btn-start').hidden = !view.idle;
     $('btn-start').textContent = startLabel(msg);

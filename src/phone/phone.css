@@ -144,6 +144,10 @@ html, body {
 .ctl:active, .ctl.down { filter: brightness(0.75); transform: scale(0.98); }
 .ctl:focus-visible, .big:focus-visible, .link:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 
+/* "KEEP MOVING!": the status line goes red and pulses while the walker is standing still on the bridge. */
+#status.keep-moving { color: #ff4d4d; font-weight: 900; letter-spacing: 0.06em; animation: wind-blink 0.4s ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: reduce) { #status.keep-moving { animation: none; } }
+
 /* Two players: a badge in the player's colour (the TV uses the same two), the game-mode picker in the lobby, and the Wind
    Master's two GUST buttons in place of WALK / RUN / JUMP. */
 .statusrow { display: flex; align-items: center; justify-content: center; gap: 8px; max-width: 100%; }

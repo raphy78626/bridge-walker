@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { statusText, viewOf, startLabel, roundResultText, STATUS } from '../src/phone/status.js';
+import { statusText, viewOf, startLabel, roundResultText, keepMovingFor, createKeepMovingBuzz, KEEP_MOVING_TEXT, STATUS } from '../src/phone/status.js';
 
 describe('viewOf', () => {
   it('behaves as solo when the two-player fields are missing', () => {
@@ -88,5 +88,46 @@ describe('statusText, two players', () => {
     expect(statusText({ mode: 'race', you: 1, phase: 'roundOver' })).toBe('Round over — press Next round');
     expect(statusText({ mode: 'windmaster', you: 1, phase: 'matchOver', result: { kind: 'bogus' } })).toBe('Match over — press New match');
     expect(statusText({ mode: 'race', you: 1, phase: 'lobby' })).toContain('Race');
+  });
+});
+
+describe('KEEP MOVING on the phone', () => {
+  const solo = (o) => ({ phase: 'playing', lives: 3, level: 2, keepMoving: true, ...o });
+
+  it('keepMovingFor: only for a walker who is playing, not paused, and the TV says so', () => {
+    expect(keepMovingFor(solo())).toBe(true);
+    expect(keepMovingFor(solo({ keepMoving: false }))).toBe(false);
+    expect(keepMovingFor({ phase: 'playing' })).toBe(false); // an older TV sends nothing
+    expect(keepMovingFor(solo({ paused: true }))).toBe(false);
+    for (const phase of ['lobby', 'falling', 'won', 'gameover', 'roundOver', 'matchOver']) expect(keepMovingFor(solo({ phase }))).toBe(false);
+    expect(keepMovingFor(solo({ keepMoving: 'yes' }))).toBe(false); // only a real true
+  });
+
+  it('keepMovingFor: a racer is warned, a Wind Master (who has no soldier) is not', () => {
+    expect(keepMovingFor(solo({ mode: 'race', role: 'racer', you: 2 }))).toBe(true);
+    expect(keepMovingFor(solo({ mode: 'windmaster', role: 'walker', you: 1 }))).toBe(true);
+    expect(keepMovingFor(solo({ mode: 'windmaster', role: 'windmaster', you: 2 }))).toBe(false);
+  });
+
+  it('the status line says KEEP MOVING! in every mode, in place of the usual instruction', () => {
+    expect(statusText(solo())).toBe(`${KEEP_MOVING_TEXT} · ❤ 3 · Level 2`);
+    expect(KEEP_MOVING_TEXT).toBe('KEEP MOVING!');
+    expect(statusText(solo({ mode: 'race', role: 'racer', you: 1, falls: 2 }))).toBe(`${KEEP_MOVING_TEXT} · Falls 2 · Level 2`);
+    expect(statusText(solo({ mode: 'windmaster', role: 'walker', you: 1 }))).toBe(`${KEEP_MOVING_TEXT} · ❤ 3 · Level 2`);
+  });
+
+  it('the status line goes back to normal when he moves, and is untouched for a Wind Master, paused, or not playing', () => {
+    expect(statusText(solo({ keepMoving: false }))).toBe(`${STATUS.playing} · ❤ 3 · Level 2`);
+    expect(statusText(solo({ mode: 'windmaster', role: 'windmaster', you: 2 }))).toMatch(/^You are the Wind Master/);
+    expect(statusText(solo({ paused: true }))).toMatch(/^Paused/);
+    expect(statusText(solo({ phase: 'falling' }))).toMatch(/^You fell!/);
+  });
+
+  it('the buzz fires once per onset, not on every state message while he stands still', () => {
+    const buzz = createKeepMovingBuzz();
+    const seq = [false, false, true, true, true, false, true, true];
+    expect(seq.map((on) => buzz.update(on))).toEqual([false, false, true, false, false, false, true, false]);
+    buzz.reset();
+    expect(buzz.update(true)).toBe(true);
   });
 });

@@ -14,6 +14,30 @@ export const STATUS = {
 
 const isPlayer = (n) => n === 1 || n === 2;
 
+export const KEEP_MOVING_TEXT = 'KEEP MOVING!';
+
+// Should this phone warn "keep moving"? The TV sets msg.keepMoving while this phone's walker has stood still on the bridge
+// too long. Not for a Wind Master, who has no soldier (the walker's flag reaches both phones in that mode), and not while
+// paused or between plays.
+export function keepMovingFor(msg, me = 1) {
+  return msg.keepMoving === true && msg.phase === 'playing' && !msg.paused && !viewOf(msg, me).windMaster;
+}
+
+// True once per onset of the warning (not on every state message while he stands still): the phone buzzes then.
+export function createKeepMovingBuzz() {
+  let active = false;
+  return {
+    update(on) {
+      const fire = on && !active;
+      active = on;
+      return fire;
+    },
+    reset() {
+      active = false;
+    },
+  };
+}
+
 // What this phone should show: its mode, player number and role, whether the controls are the Wind Master's, and whether the
 // mode picker is on screen.
 // `me` is the player number the server gave this phone at pairing; the TV's `you` wins when it sends one.
@@ -80,7 +104,8 @@ export function statusText(msg, me = 1) {
   if (msg.phase === 'gameover' && Number.isFinite(msg.runScore)) {
     return `${STATUS.gameover} · ${formatScore(msg.runScore)} pts · ${tail}`;
   }
-  return `${STATUS[msg.phase]} · ${tail}`;
+  const head = keepMovingFor(msg, me) ? KEEP_MOVING_TEXT : STATUS[msg.phase];
+  return `${head} · ${tail}`;
 }
 
 function multiplayerText(msg, view) {
@@ -95,6 +120,8 @@ function multiplayerText(msg, view) {
     return msg.phase === 'falling' ? `They fell!${level}` : `You are the Wind Master — blow them off!${wind}`;
   }
   const falls = view.mode === 'race' && Number.isFinite(msg.falls) ? ` · Falls ${msg.falls}` : Number.isFinite(msg.lives) ? ` · ❤ ${msg.lives}` : '';
-  const base = msg.phase === 'falling' ? 'You fell!' : view.mode === 'race' ? 'Race! Get to the end first' : 'Balance! Jump the gaps';
+  const base = keepMovingFor(msg, view.player)
+    ? KEEP_MOVING_TEXT
+    : msg.phase === 'falling' ? 'You fell!' : view.mode === 'race' ? 'Race! Get to the end first' : 'Balance! Jump the gaps';
   return `${base}${falls}${level}`;
 }
