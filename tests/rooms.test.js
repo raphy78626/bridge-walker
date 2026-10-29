@@ -463,3 +463,18 @@ describe('the TV join on the wire', () => {
     }
   });
 });
+
+describe('room codes', () => {
+  it('are 4 letters without I or O, all different, from a cryptographic source', () => {
+    const rooms = createRooms();
+    const codes = new Set();
+    for (let i = 0; i < 300; i++) {
+      const tv = fakeSocket();
+      rooms.join(tv, { t: 'join', role: 'tv' });
+      const { room } = tv.sent[0];
+      expect(room).toMatch(/^[A-HJ-NP-Z]{4}$/);
+      codes.add(room);
+    }
+    expect(codes.size).toBe(300);
+  });
+});

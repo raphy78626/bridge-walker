@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import { encode, PHONE_TYPES, TV_TYPES } from '../src/shared/protocol.js';
 
 const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I or O: easy to read off a TV
@@ -24,7 +24,7 @@ export function createRooms({ graceMs = TV_GRACE_MS, timers = unrefTimers } = {}
   function newCode() {
     let code;
     do {
-      code = Array.from({ length: 4 }, () => LETTERS[Math.floor(Math.random() * LETTERS.length)]).join('');
+      code = Array.from({ length: 4 }, () => LETTERS[randomInt(LETTERS.length)]).join(''); // crypto: a code cannot be predicted from earlier ones
     } while (rooms.has(code));
     return code;
   }
