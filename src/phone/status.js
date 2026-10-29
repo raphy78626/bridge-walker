@@ -13,6 +13,7 @@ export const STATUS = {
 // at game over with the run score. A TV that does not send those fields gets the plain line.
 export function statusText(msg) {
   const tail = `❤ ${msg.lives} · Level ${msg.level}`;
+  if (msg.paused && msg.phase === 'playing') return `Paused — tap ▶ to resume · ${tail}`;
   const line = msg.phase === 'won' ? resultLine(msg.stars, msg.score) : '';
   if (line) return `${line} · ${tail}`; // the Start button is on screen, so no need to say it
   if (msg.phase === 'gameover' && Number.isFinite(msg.runScore)) {

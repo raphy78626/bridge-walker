@@ -7,7 +7,7 @@ const fc = (state, dir = 1, strength = 0.5) => ({ state, dir, strength, eta: 1, 
 
 describe('state message', () => {
   it('keeps the old fields and adds the wind, calm by default', () => {
-    expect(buildStateMessage(base)).toEqual({ t: 'state', phase: 'playing', lives: 3, level: 1, wind: 'calm', windDir: 0 });
+    expect(buildStateMessage(base)).toEqual({ t: 'state', phase: 'playing', lives: 3, level: 1, paused: false, wind: 'calm', windDir: 0 });
   });
 
   it('carries the forecast state and direction', () => {
@@ -39,6 +39,15 @@ describe('state sync (send on change only)', () => {
     expect(sync.changed(base)).toBe(true); // back to calm
   });
 
+  it('reports pause and resume', () => {
+    const sync = createStateSync();
+    sync.changed(base);
+    expect(buildStateMessage({ ...base, paused: true }).paused).toBe(true);
+    expect(sync.changed({ ...base, paused: true })).toBe(true);
+    expect(sync.changed({ ...base, paused: true })).toBe(false);
+    expect(sync.changed(base)).toBe(true);
+  });
+
   it('reports lives, level, phase and a new result', () => {
     const sync = createStateSync();
     sync.changed(base);
@@ -61,6 +70,7 @@ describe('state sync (send on change only)', () => {
 describe('phone status line', () => {
   it('keeps the old line when the TV sends no score', () => {
     expect(statusText({ phase: 'playing', lives: 3, level: 2 })).toBe(`${STATUS.playing} · ❤ 3 · Level 2`);
+    expect(statusText({ phase: 'playing', paused: true, lives: 3, level: 2 })).toBe('Paused — tap ▶ to resume · ❤ 3 · Level 2');
     expect(statusText({ phase: 'won', lives: 3, level: 2 })).toBe(`${STATUS.won} · ❤ 3 · Level 2`);
   });
 

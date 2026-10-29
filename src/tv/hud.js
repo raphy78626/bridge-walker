@@ -10,6 +10,7 @@ export function formatTime(sec) {
 }
 
 export function messageFor(s) {
+  if (s.paused && s.phase === 'playing') return 'PAUSED — tap ▶ on your phone to resume';
   switch (s.phase) {
     case 'lobby':
       return 'Press START on your phone';

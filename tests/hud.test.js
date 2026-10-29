@@ -23,6 +23,7 @@ describe('hud text', () => {
   it('shows a message for each phase', () => {
     expect(messageFor({ phase: 'lobby' })).toBe('Press START on your phone');
     expect(messageFor({ phase: 'playing' })).toBe('');
+    expect(messageFor({ phase: 'playing', paused: true })).toBe('PAUSED — tap ▶ on your phone to resume');
     expect(messageFor({ phase: 'falling', lives: 1 })).toBe('You fell! 1 life left');
     expect(messageFor({ phase: 'falling', lives: 2 })).toBe('You fell! 2 lives left');
     expect(messageFor({ phase: 'falling', lives: 0 })).toBe('You fell!');

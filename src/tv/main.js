@@ -144,6 +144,12 @@ async function onMessage(msg) {
       session.start();
       startSound();
       break;
+    case 'pause':
+      if (gate.live(performance.now())) session.togglePause(); // the state sync tells the phone
+      break;
+    case 'volume':
+      audio.setVolumes(msg); // the phone remembers the levels and sends them again on every pairing
+      break;
   }
 }
 

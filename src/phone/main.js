@@ -86,6 +86,7 @@ $('btn-connect').addEventListener('click', async () => {
 
 function onMessage(msg) {
   if (msg.t === 'paired') {
+    sendVolume(); // a freshly started TV app plays at full volume until it hears the saved levels
     startCalibration();
   } else if (msg.t === 'error') {
     showProblem(
@@ -97,6 +98,8 @@ function onMessage(msg) {
     $('status').textContent = statusText(msg);
     showWind(msg);
     $('btn-start').hidden = msg.phase === 'playing' || msg.phase === 'falling';
+    $('btn-pause').hidden = msg.phase !== 'playing';
+    $('btn-pause').textContent = msg.paused ? '▶ Resume' : '⏸ Pause';
     if (msg.phase === 'falling') navigator.vibrate?.(300);
   }
 }
@@ -184,6 +187,36 @@ for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
 jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 $('btn-start').addEventListener('click', () => net?.send({ t: 'start' }));
 $('btn-camera').addEventListener('click', () => net?.send({ t: 'camera' })); // the TV cycles chase → POV → cinematic
+$('btn-pause').addEventListener('click', () => net?.send({ t: 'pause' })); // a toggle; the TV's state says which
+
+// Music (the TV's ambience) and effects volume, 0..1, remembered on this phone.
+const VOLUME_KEY = 'bridge.volume';
+let volume = loadVolume();
+function loadVolume() {
+  try {
+    const v = JSON.parse(localStorage.getItem(VOLUME_KEY));
+    if (v && Number.isFinite(v.music) && Number.isFinite(v.sfx)) return v;
+  } catch {}
+  return { music: 1, sfx: 1 };
+}
+function sendVolume() {
+  net?.send({ t: 'volume', music: volume.music, sfx: volume.sfx });
+}
+for (const [id, key] of [['vol-music', 'music'], ['vol-sfx', 'sfx']]) {
+  $(id).value = String(Math.round(volume[key] * 100));
+  $(id).addEventListener('input', (e) => {
+    volume = { ...volume, [key]: Number(e.target.value) / 100 };
+    try {
+      localStorage.setItem(VOLUME_KEY, JSON.stringify(volume));
+    } catch {}
+    sendVolume();
+  });
+}
+$('btn-sound').addEventListener('click', () => {
+  const sheet = $('sound-sheet');
+  sheet.hidden = !sheet.hidden;
+  $('btn-sound').setAttribute('aria-expanded', String(!sheet.hidden));
+});
 $('btn-recalibrate').addEventListener('click', () => {
   clearSign();
   startCalibration();

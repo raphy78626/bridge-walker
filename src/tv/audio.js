@@ -129,6 +129,8 @@ export function createAudio({
   let echoIn = null;
   let noise = null;
   let volume = 0.85;
+  let musicVolume = 1; // the ambience bed; set from the phone's settings sheet
+  let sfxVolume = 1; // footsteps, jumps, gusts, the scream
   let loading = null;
   let wantAmbience = false;
   let amb = null; // the bed that is playing (or fading in): { theme, bus, sources, lfos }
@@ -178,8 +180,10 @@ export function createAudio({
     master.connect(comp);
 
     sfx = ctx.createGain();
+    sfx.gain.value = sfxVolume;
     sfx.connect(master);
     ambBus = ctx.createGain();
+    ambBus.gain.value = musicVolume;
     ambBus.connect(master);
 
     // A shared canyon echo for far-away sounds (eagle, the scream): delay with a darkening feedback loop.
@@ -781,6 +785,14 @@ export function createAudio({
     if (master) master.gain.setTargetAtTime(volume, ctx.currentTime, 0.03);
   }
 
+  // The phone's settings sheet: music (the ambience bed) and sound effects, each 0..1. Safe before unlock().
+  function setVolumes({ music, sfx: effects }) {
+    musicVolume = clamp(Number.isFinite(music) ? music : musicVolume, 0, 1);
+    sfxVolume = clamp(Number.isFinite(effects) ? effects : sfxVolume, 0, 1);
+    if (ambBus) ambBus.gain.setTargetAtTime(musicVolume, ctx.currentTime, 0.05);
+    if (sfx) sfx.gain.setTargetAtTime(sfxVolume, ctx.currentTime, 0.05);
+  }
+
   // Diagnostics: context state and each decoded file's duration in seconds.
   function info() {
     const durations = {};
@@ -803,6 +815,7 @@ export function createAudio({
     setTheme: safe('setTheme', setTheme),
     getTheme: () => theme,
     setMasterVolume: safe('setMasterVolume', setMasterVolume),
+    setVolumes: safe('setVolumes', setVolumes),
     info,
   };
 }

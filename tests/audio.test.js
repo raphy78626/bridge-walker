@@ -366,6 +366,29 @@ describe('setMasterVolume', () => {
   });
 });
 
+describe('setVolumes (the phone settings sheet)', () => {
+  it('sets the ambience (music) and effects buses separately, clamped to 0..1', async () => {
+    const { audio, log } = setup();
+    await audio.unlock();
+    const [, sfx, amb] = log.gains; // created in order: master, sfx, ambience
+    audio.setVolumes({ music: 0.3, sfx: 0.6 });
+    expect(amb.gain.target).toBe(0.3);
+    expect(sfx.gain.target).toBe(0.6);
+    audio.setVolumes({ music: 5, sfx: -1 });
+    expect(amb.gain.target).toBe(1);
+    expect(sfx.gain.target).toBe(0);
+  });
+
+  it('remembers volumes chosen before the context exists', async () => {
+    const { audio, log } = setup();
+    audio.setVolumes({ music: 0.2, sfx: 0.7 });
+    await audio.unlock();
+    const [, sfx, amb] = log.gains;
+    expect(amb.gain.value).toBe(0.2);
+    expect(sfx.gain.value).toBe(0.7);
+  });
+});
+
 describe('createEagleScheduler', () => {
   const makeAudio = () => ({ eagle: vi.fn() });
 

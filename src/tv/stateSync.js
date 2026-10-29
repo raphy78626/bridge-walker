@@ -1,7 +1,7 @@
 // The {t:'state'} message the TV sends the phone, and the check for when it has changed. The game loop calls
 // changed() every frame without allocating, and message() only when it returned true.
 //
-// Fields: phase, lives, level (always), wind ('calm'|'warning'|'gust') and windDir (-1|0|1) from the forecast,
+// Fields: phase, lives, level, paused (always), wind ('calm'|'warning'|'gust') and windDir (-1|0|1) from the forecast,
 // and after a level stars, score and runScore from the result (runScore also at game over).
 import { forecastOf } from './windFx.js';
 
@@ -18,6 +18,7 @@ export function buildStateMessage(session) {
     phase: session.phase,
     lives: session.lives,
     level: session.level,
+    paused: !!session.paused,
     wind: f.state,
     windDir: f.dir || 0,
   };
@@ -32,7 +33,7 @@ export function buildStateMessage(session) {
 }
 
 export function createStateSync() {
-  let phase, lives, level, wind, windDir, stars, score, runScore;
+  let phase, lives, level, paused, wind, windDir, stars, score, runScore;
   let seen = false;
   return {
     // True when anything the phone shows differs from the last message built. Updates what it compares against.
@@ -48,6 +49,7 @@ export function createStateSync() {
         phase === session.phase &&
         lives === session.lives &&
         level === session.level &&
+        paused === !!session.paused &&
         wind === f.state &&
         windDir === nextWindDir &&
         stars === nextStars &&
@@ -56,6 +58,7 @@ export function createStateSync() {
       phase = session.phase;
       lives = session.lives;
       level = session.level;
+      paused = !!session.paused;
       wind = f.state;
       windDir = nextWindDir;
       stars = nextStars;

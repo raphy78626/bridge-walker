@@ -148,7 +148,7 @@ export function createScene(canvas) {
     render(s, t) {
       const w = s.walker;
       const z = -w.z;
-      const dt = lastT === null ? 0 : Math.min(Math.max(t - lastT, 0), 0.05);
+      const dt = lastT === null || s.paused ? 0 : Math.min(Math.max(t - lastT, 0), 0.05); // paused: the soldier, streaks and sway hold still
       lastT = t;
       const gaps = s.gaps ?? NO_GAPS;
       if (gaps !== gapsApplied) {

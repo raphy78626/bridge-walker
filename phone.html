@@ -33,7 +33,15 @@
         </div>
         <p id="wind-text" class="wind-text" role="status" aria-live="polite"></p>
         <button id="btn-start" class="big" type="button">Start</button>
-        <button id="btn-camera" class="view" type="button" aria-label="Change camera view: chase, first person, cinematic.">🎥 VIEW</button>
+        <div class="row">
+          <button id="btn-pause" class="view" type="button" hidden>⏸ Pause</button>
+          <button id="btn-camera" class="view" type="button" aria-label="Change camera view: chase, first person, cinematic.">🎥 VIEW</button>
+          <button id="btn-sound" class="view" type="button" aria-expanded="false" aria-controls="sound-sheet">🔊 Sound</button>
+        </div>
+        <div id="sound-sheet" class="sheet" hidden>
+          <label>Music <input id="vol-music" type="range" min="0" max="100" step="5" /></label>
+          <label>Effects <input id="vol-sfx" type="range" min="0" max="100" step="5" /></label>
+        </div>
         <button id="btn-recalibrate" class="link" type="button">Recalibrate</button>
       </div>
       <div class="pad pad-right">
