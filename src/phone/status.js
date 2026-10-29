@@ -15,6 +15,7 @@ export const STATUS = {
 const isPlayer = (n) => n === 1 || n === 2;
 
 export const KEEP_MOVING_TEXT = 'KEEP MOVING!';
+export const TV_AWAY_TEXT = 'TV reconnecting… stay here';
 export const SPECTATOR_TEXT = 'Solo game in progress';
 export const SPECTATOR_WAITING_TEXT = 'Waiting for the other phone to start';
 // The race leader held at the leash (the TV's msg.waiting): he is safe there, and keeps balancing.

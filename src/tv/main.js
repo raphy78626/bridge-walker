@@ -16,6 +16,7 @@ import { createGustTrigger, forecastOf } from './windFx.js';
 import { recordLevel, recordRun, resultView, sameResult } from './results.js';
 import { createStateSync, sessionFor, stateMessageFor } from './stateSync.js';
 import { CAMERA_LABELS, loadCameraMode, saveCameraMode } from './cameras.js';
+import { loadRoom, saveRoom } from './roomMemory.js';
 
 const newMatch = (mode) => createMatch({ mode, seed: Date.now() % 100000 });
 let match = newMatch('solo'); // solo until a phone picks another mode (and replaced by a new match when it does)
@@ -126,7 +127,8 @@ function updatePanel() {
 
 function openSocket() {
   try {
-    const conn = connect(onMessage, () => conn.send({ t: 'join', role: 'tv' }), onClose);
+    // After a reload: the room it had, so the phones stay paired (roomMemory.js).
+    const conn = connect(onMessage, () => conn.send({ t: 'join', role: 'tv', ...loadRoom(sessionStore()) }), onClose);
     net = conn;
   } catch (err) {
     console.error(err);
@@ -165,6 +167,7 @@ async function onMessage(msg) {
       await QRCode.toCanvas(document.getElementById('qr'), url, { width: 280, margin: 1 });
       hud.showPairing(url, msg.room);
       hasRoom = true;
+      saveRoom(sessionStore(), msg);
       updatePanel();
       break;
     }
@@ -236,6 +239,14 @@ function pushStates() {
 function storage() {
   try {
     return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function sessionStore() {
+  try {
+    return window.sessionStorage;
   } catch {
     return null;
   }

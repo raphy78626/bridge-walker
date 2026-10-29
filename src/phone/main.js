@@ -1,7 +1,7 @@
 import { connect } from '../shared/client.js';
 import { createTiltReader } from './tilt.js';
 import { createGustTrigger, strengthOfLevel, windIndicator } from '../tv/windFx.js'; // pure helpers, no three.js
-import { statusText, viewOf, startLabel, keepMovingFor, createKeepMovingBuzz } from './status.js';
+import { statusText, viewOf, startLabel, keepMovingFor, createKeepMovingBuzz, TV_AWAY_TEXT } from './status.js';
 import { PLAYER_COLORS } from '../shared/players.js';
 import { phoneId } from './identity.js';
 import { GUST_COOLDOWN_S, CONTROLLED_GUST_S } from '../game/wind.js';
@@ -118,6 +118,11 @@ function onMessage(msg) {
           ? 'Two phones are already playing — ask one to leave.'
           : 'Another phone took over.',
     );
+  } else if (msg.t === 'tv-away') {
+    // The TV dropped (a reload, a Wi-Fi blip): the server holds the room for it a while, so stay put and say so. Its next
+    // state message, once it is back, puts the usual line back.
+    $('status').textContent = TV_AWAY_TEXT;
+    $('status').classList.remove('keep-moving');
   } else if (msg.t === 'peer-left') {
     showProblem('TV disconnected — scan the new QR code on the TV');
   } else if (msg.t === 'state') {

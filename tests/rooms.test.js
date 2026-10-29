@@ -6,6 +6,18 @@ function fakeSocket() {
   return { sent: [], closed: 0, send(raw) { this.sent.push(JSON.parse(raw)); }, close() { this.closed += 1; } };
 }
 const last = (sock) => sock.sent.at(-1);
+// The TV's grace period, run by hand: fire() is the 30 s running out.
+function fakeTimers() {
+  const pending = new Map();
+  let n = 0;
+  return {
+    set(fn) { n += 1; pending.set(n, fn); return n; },
+    clear(id) { pending.delete(id); },
+    get count() { return pending.size; },
+    fire() { const fns = [...pending.values()]; pending.clear(); for (const fn of fns) fn(); },
+  };
+}
+const KEY_RE = /^[A-Za-z0-9_-]{16,64}$/;
 
 function pairedRoom() {
   const rooms = createRooms();
@@ -22,7 +34,7 @@ describe('rooms', () => {
     const rooms = createRooms();
     const tv = fakeSocket();
     rooms.join(tv, { t: 'join', role: 'tv' });
-    expect(last(tv)).toEqual({ t: 'room', room: expect.stringMatching(/^[A-Z]{4}$/) });
+    expect(last(tv)).toEqual({ t: 'room', room: expect.stringMatching(/^[A-Z]{4}$/), key: expect.stringMatching(KEY_RE) });
   });
 
   it('pairs a phone with the TV that owns the code', () => {
@@ -72,9 +84,17 @@ describe('rooms', () => {
     expect(last(phone2)).toEqual({ t: 'paired', player: 1 });
   });
 
-  it('tells the phone when the TV leaves and forgets the room', () => {
-    const { rooms, tv, phone, code } = pairedRoom();
+  it('tells the phone when the TV leaves, and forgets the room once the TV has not come back in time', () => {
+    const timers = fakeTimers();
+    const rooms = createRooms({ timers });
+    const tv = fakeSocket();
+    const phone = fakeSocket();
+    rooms.join(tv, { t: 'join', role: 'tv' });
+    const code = tv.sent[0].room;
+    rooms.join(phone, { t: 'join', role: 'phone', room: code });
     rooms.leave(tv);
+    expect(last(phone)).toEqual({ t: 'tv-away' });
+    timers.fire();
     expect(last(phone)).toEqual({ t: 'peer-left' });
     const phone2 = fakeSocket();
     rooms.join(phone2, { t: 'join', role: 'phone', room: code });
@@ -106,8 +126,8 @@ describe('rooms', () => {
 });
 
 describe('rooms: two phones', () => {
-  function twoPhones() {
-    const rooms = createRooms();
+  function twoPhones(opts) {
+    const rooms = createRooms(opts);
     const tv = fakeSocket();
     const p1 = fakeSocket();
     const p2 = fakeSocket();
@@ -202,9 +222,13 @@ describe('rooms: two phones', () => {
     expect([tv.sent.length, p1.sent.length, p2.sent.length]).toEqual([t, n1, n2]);
   });
 
-  it('when the TV leaves, both phones hear peer-left and the room is gone', () => {
-    const { rooms, tv, p1, p2, code } = twoPhones();
+  it('when the TV leaves and does not come back, both phones hear peer-left and the room is gone', () => {
+    const timers = fakeTimers();
+    const { rooms, tv, p1, p2, code } = twoPhones({ timers });
     rooms.leave(tv);
+    expect(last(p1)).toEqual({ t: 'tv-away' });
+    expect(last(p2)).toEqual({ t: 'tv-away' });
+    timers.fire();
     expect(last(p1)).toEqual({ t: 'peer-left' });
     expect(last(p2)).toEqual({ t: 'peer-left' });
     const p3 = fakeSocket();
@@ -345,5 +369,97 @@ describe('rooms: a reconnecting phone', () => {
     const { rooms, code, phones } = setup(['aaa', 'bbb']);
     joinWith(rooms, phones[1], code, 'bbb'); // same socket again
     expect(last(phones[1])).toEqual({ t: 'paired', player: 2 });
+  });
+});
+
+describe('a TV that drops comes back to its room', () => {
+  function setup() {
+    const timers = fakeTimers();
+    const rooms = createRooms({ timers });
+    const tv = fakeSocket();
+    const p1 = fakeSocket();
+    const p2 = fakeSocket();
+    rooms.join(tv, { t: 'join', role: 'tv' });
+    const { room: code, key } = tv.sent[0];
+    rooms.join(p1, { t: 'join', role: 'phone', room: code, id: 'phone-a' });
+    rooms.join(p2, { t: 'join', role: 'phone', room: code, id: 'phone-b' });
+    return { timers, rooms, tv, p1, p2, code, key };
+  }
+
+  it('with its key, within the grace period: same room and key, both phones still paired and told it is back', () => {
+    const { timers, rooms, tv, p1, p2, code, key } = setup();
+    rooms.leave(tv);
+    expect(timers.count).toBe(1);
+    const tv2 = fakeSocket();
+    rooms.join(tv2, decode(encode({ t: 'join', role: 'tv', room: code, key })));
+    expect(timers.count).toBe(0); // the grace timer is cancelled
+    expect(tv2.sent).toEqual([{ t: 'room', room: code, key }, { t: 'paired', player: 1 }, { t: 'paired', player: 2 }]);
+    expect(last(p1)).toEqual({ t: 'tv-back' });
+    expect(last(p2)).toEqual({ t: 'tv-back' });
+    rooms.relay(p2, { t: 'walk', on: true });
+    expect(last(tv2)).toEqual({ t: 'walk', on: true, p: 2 });
+    rooms.relay(tv2, { t: 'state', phase: 'lobby', to: 1 });
+    expect(last(p1)).toEqual({ t: 'state', phase: 'lobby' });
+  });
+
+  it('while the TV is away, phone input goes nowhere and a phone can still come back to its slot', () => {
+    const { rooms, tv, p1, code } = setup();
+    rooms.leave(tv);
+    expect(() => rooms.relay(p1, { t: 'tilt', v: 0.3 })).not.toThrow();
+    const p1again = fakeSocket();
+    rooms.join(p1again, { t: 'join', role: 'phone', room: code, id: 'phone-a' });
+    expect(last(p1again)).toEqual({ t: 'paired', player: 1 });
+  });
+
+  it('takes the room over from its old socket if that one has not closed yet, and lets no phone go', () => {
+    const { timers, rooms, tv, p1, code, key } = setup();
+    const tv2 = fakeSocket();
+    rooms.join(tv2, { t: 'join', role: 'tv', room: code, key });
+    expect(tv.closed).toBe(1);
+    expect(timers.count).toBe(0);
+    rooms.leave(tv); // the old socket's close event, after the takeover: a stranger now
+    expect(last(p1)).toEqual({ t: 'tv-back' });
+    expect(timers.count).toBe(0);
+    rooms.relay(p1, { t: 'jump' });
+    expect(last(tv2)).toEqual({ t: 'jump', p: 1 });
+  });
+
+  it('a wrong key gets a new room, and the old one keeps waiting for its own TV', () => {
+    const { timers, rooms, tv, code } = setup();
+    rooms.leave(tv);
+    const stranger = fakeSocket();
+    rooms.join(stranger, { t: 'join', role: 'tv', room: code, key: 'x'.repeat(24) });
+    expect(last(stranger).room).not.toBe(code);
+    expect(timers.count).toBe(1);
+  });
+
+  it('too late: the room is gone and the TV gets a new one', () => {
+    const { timers, rooms, tv, p1, code, key } = setup();
+    rooms.leave(tv);
+    timers.fire();
+    expect(last(p1)).toEqual({ t: 'peer-left' });
+    const tv2 = fakeSocket();
+    rooms.join(tv2, { t: 'join', role: 'tv', room: code, key });
+    expect(tv2.sent[0].room).not.toBe(code);
+    expect(tv2.sent[0].key).not.toBe(key);
+  });
+
+  it('every room gets its own key, and the phones never see it', () => {
+    const { tv, p1, p2 } = setup();
+    const rooms = createRooms();
+    const other = fakeSocket();
+    rooms.join(other, { t: 'join', role: 'tv' });
+    expect(other.sent[0].key).not.toBe(tv.sent[0].key);
+    for (const m of [...p1.sent, ...p2.sent]) expect(m.key).toBeUndefined();
+  });
+});
+
+describe('the TV join on the wire', () => {
+  it('keeps a well-formed room and key, and turns anything less into a plain join', () => {
+    const key = 'abcDEF123_-abcDEF123_-';
+    expect(decode(encode({ t: 'join', role: 'tv', room: 'ABCD', key }))).toEqual({ t: 'join', role: 'tv', room: 'ABCD', key });
+    for (const bad of [{ room: 'ABCD' }, { key }, { room: 'abcd', key }, { room: 'ABCD', key: 'short' }, { room: 'ABCD', key: 'bad key with spaces!!' }]) {
+      expect(decode(encode({ t: 'join', role: 'tv', ...bad }))).toEqual({ t: 'join', role: 'tv' });
+    }
   });
 });

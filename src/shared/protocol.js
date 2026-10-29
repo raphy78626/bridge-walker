@@ -1,11 +1,13 @@
 // Every message is a small JSON object with a type field `t`.
 // phone → server: join {role: 'phone', room, id?} (id: the phone's stable identity, 1-64 of A-Za-z0-9_-).
+// tv → server: join {role: 'tv', room?, key?}: with the room and key it was given before (a reload), it gets that room back.
 // phone → tv: tilt {v}, walk {on}, run {on}, jump, camera (cycle the view), pause (toggle), volume {music, sfx}, start,
 //             gust {dir: -1|1} (the Wind Master), mode {mode: 'solo'|'race'|'windmaster'}.
 //             The server stamps every one of these with p: 1|2, the sender's player slot (whatever the client sent is overwritten).
 // tv → phone: state {phase, lives, level, ..., to?}. With to: 1|2 it goes to that player only (the server strips `to`);
 //             without it, to every phone.
-// server → client: room {room}, paired {player}, peer-left {player (TV side) | nothing (phone side)}, error {reason}
+// server → client: room {room, key} (TV only), paired {player}, peer-left {player (TV side) | nothing (phone side)},
+//                  error {reason}, tv-away / tv-back (phone side: the TV dropped and may come back, or did).
 export const PHONE_TYPES = new Set(['tilt', 'walk', 'run', 'jump', 'camera', 'pause', 'volume', 'start', 'gust', 'mode']);
 export const TV_TYPES = new Set(['state']);
 export const RELAYED = new Set([...PHONE_TYPES, ...TV_TYPES]);
@@ -14,12 +16,13 @@ export const RELAYED = new Set([...PHONE_TYPES, ...TV_TYPES]);
 export const MAX_MESSAGE_BYTES = 1024;
 export const MODES = ['solo', 'race', 'windmaster'];
 const unit = (v) => Math.max(0, Math.min(1, v));
-const SERVER_TYPES = new Set(['room', 'paired', 'peer-left', 'error']);
+const SERVER_TYPES = new Set(['room', 'paired', 'peer-left', 'error', 'tv-away', 'tv-back']);
 const ROOM_RE = /^[A-Z]{4}$/;
 // A phone's stable identity: it makes one up the first time and keeps it for the tab's life, and sends it in its join. A
 // phone that reconnects with the id that holds a slot takes that slot (same player number) instead of being turned away.
 const PHONE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 export const isValidPhoneId = (id) => typeof id === 'string' && PHONE_ID_RE.test(id);
+const ROOM_KEY_RE = /^[A-Za-z0-9_-]{16,64}$/;
 
 export const encode = (msg) => JSON.stringify(msg);
 
@@ -41,7 +44,11 @@ function decodeMessage(msg) {
   if (!msg || typeof msg !== 'object' || typeof msg.t !== 'string') return null;
   switch (msg.t) {
     case 'join':
-      if (msg.role === 'tv') return { t: 'join', role: 'tv' };
+      if (msg.role === 'tv') {
+        // Asking for a room back needs both a well-formed code and key; anything less is a plain join (a new room).
+        const ok = typeof msg.room === 'string' && ROOM_RE.test(msg.room) && typeof msg.key === 'string' && ROOM_KEY_RE.test(msg.key);
+        return ok ? { t: 'join', role: 'tv', room: msg.room, key: msg.key } : { t: 'join', role: 'tv' };
+      }
       if (msg.role === 'phone') {
         // A bad code still gets through, as '', so rooms.join answers {t:'error', reason:'no-room'} instead of silence.
         const join = { t: 'join', role: 'phone', room: typeof msg.room === 'string' && ROOM_RE.test(msg.room) ? msg.room : '' };

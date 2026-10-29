@@ -1,7 +1,8 @@
 // Pairs a fake TV and two phones through a running server, the way the real ones connect, and checks: a tilt arrives
 // stamped with the phone's player number (a spoofed p is overwritten), a state with `to` reaches only that phone, a
 // broadcast state reaches both, a third phone gets room-full, a leaving phone frees its slot, and a phone that reconnects
-// with its id while its old socket still holds the slot takes that slot over (same player, the old socket closed, no peer-left).
+// with its id while its old socket still holds the slot takes that slot over (same player, the old socket closed, no peer-left),
+// and a TV that reloads gets its room back with its key: both phones stay paired (tv-away, then tv-back).
 // Usage: node scripts/smoke-relay.mjs [httpsPort]   (5173 for `npm run dev`, 5174 for `npm run tv`; default 5174)
 // The TV connects over plain HTTP on httpsPort + 10, the phone over HTTPS on httpsPort.
 import assert from 'node:assert/strict';
@@ -49,7 +50,7 @@ try {
   const tv = await open(tvUrl, 'TV');
   const tvIn = inbox(tv);
   tv.send(JSON.stringify({ t: 'join', role: 'tv' }));
-  const { room } = await tvIn.next('TV room code');
+  const { room, key } = await tvIn.next('TV room code');
 
   const join = async (what, id) => {
     const ws = await open(phoneUrl, what);
@@ -117,7 +118,23 @@ try {
   assert.deepEqual(bad.hello, { t: 'error', reason: 'room-full' });
   console.log('a malformed id is ignored:', bad.hello);
 
-  for (const ws of [tv, p2b.ws, p3.ws, p4.ws, bad.ws]) ws.close();
+  // The TV reloads: its socket closes, the phones hear it is away, and the new socket asks for the room back with its key.
+  tv.close();
+  assert.deepEqual(await p4.box.next('tv-away on player 1'), { t: 'tv-away' });
+  assert.deepEqual(await p2b.box.next('tv-away on player 2'), { t: 'tv-away' });
+  const tv2 = await open(tvUrl, 'TV again');
+  const tv2In = inbox(tv2);
+  tv2.send(JSON.stringify({ t: 'join', role: 'tv', room, key }));
+  assert.deepEqual(await tv2In.next('the same room back'), { t: 'room', room, key });
+  assert.deepEqual(await tv2In.next('player 1 still paired'), { t: 'paired', player: 1 });
+  assert.deepEqual(await tv2In.next('player 2 still paired'), { t: 'paired', player: 2 });
+  assert.deepEqual(await p4.box.next('tv-back on player 1'), { t: 'tv-back' });
+  assert.deepEqual(await p2b.box.next('tv-back on player 2'), { t: 'tv-back' });
+  p2b.ws.send(JSON.stringify({ t: 'jump' }));
+  assert.deepEqual(await tv2In.next('input reaches the reloaded TV'), { t: 'jump', p: 2 });
+  console.log('TV reload: same room', room, 'both phones still paired');
+
+  for (const ws of [tv2, p2b.ws, p3.ws, p4.ws, bad.ws]) ws.close();
   console.log('smoke ok');
 } catch (err) {
   console.error('smoke test failed:', err.message);
