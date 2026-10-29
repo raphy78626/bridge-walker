@@ -3,7 +3,8 @@
 //
 //   tv.send({ ...buildStateMessage(sessionOf(player)), ...matchStateFor(match, player), to: player })
 //
-// Always: mode, you (1|2), role ('walker' | 'windmaster' | 'racer'), gustReady (the Wind Master may send a gust now).
+// Always: mode, you (1|2), role ('walker' | 'windmaster' | 'racer'), gustReady (the Wind Master may send a gust now),
+// canChangeMode (the phone shows its mode picker only then: the lobby, the end of a match, or solo between levels).
 // Race and windmaster also override phase ('lobby' | 'playing' | 'falling' | 'roundOver' | 'matchOver': 'falling' is
 // this player's own walker, or the walker in windmaster) and level, and add round, scores, and the round's result
 // once there is one. Race adds tally and falls (this player's, since lives do not run out); windmaster adds lives.
@@ -17,7 +18,7 @@ export function roleOf(match, player) {
 }
 
 export function matchStateFor(match, player) {
-  const msg = { mode: match.mode, you: player, role: roleOf(match, player), gustReady: !!match.gustReady };
+  const msg = { mode: match.mode, you: player, role: roleOf(match, player), gustReady: !!match.gustReady, canChangeMode: !!match.canChangeMode };
   if (!MODES.includes(match.mode) || match.mode === 'solo') return msg;
   const session = match.mode === 'race' ? match.sessions[player] : match.sessions[1];
   msg.phase = match.phase === 'playing' ? session.phase : match.phase;

@@ -53,6 +53,55 @@ describe('mode switch guard', () => {
   });
 });
 
+describe('mode switch guard: the tally and scores are not wiped between rounds', () => {
+  // Gets a match to the end of its round: the walker on the last metre, no gap in the way, and a step over the line.
+  function finishRound(m, player = 1) {
+    const s = m.sessions[m.mode === 'race' ? player : 1];
+    s.walker = { ...s.walker, z: 59.99 };
+    s.gaps = [];
+    m.input(player, { t: 'walk', on: true });
+    m.update(1 / 60);
+  }
+  it('race: lobby and matchOver yes; playing no; roundOver no', () => {
+    const m = createMatch({ mode: 'race', winsToWin: 2 });
+    expect(modeSwitch(m, { t: 'mode', mode: 'solo' })).toBe('solo');
+    m.start();
+    expect(modeSwitch(m, { t: 'mode', mode: 'solo' })).toBe(null);
+    finishRound(m);
+    expect(m.phase).toBe('roundOver');
+    expect(modeSwitch(m, { t: 'mode', mode: 'windmaster', p: 2 })).toBe(null); // the other phone cannot wipe the tally
+    expect(modeSwitch(m, { t: 'mode', mode: 'solo', p: 1 })).toBe(null);
+  });
+  it('race: at matchOver a switch is allowed', () => {
+    const m = createMatch({ mode: 'race', winsToWin: 1 });
+    m.start();
+    finishRound(m);
+    expect(m.phase).toBe('matchOver');
+    expect(modeSwitch(m, { t: 'mode', mode: 'solo', p: 2 })).toBe('solo');
+  });
+  it('windmaster: refused at roundOver, allowed in the lobby and at matchOver', () => {
+    const m = createMatch({ mode: 'windmaster', rounds: 2 });
+    expect(modeSwitch(m, { t: 'mode', mode: 'race' })).toBe('race');
+    m.start();
+    finishRound(m, 1);
+    expect(m.phase).toBe('roundOver');
+    expect(modeSwitch(m, { t: 'mode', mode: 'race', p: 2 })).toBe(null);
+    m.start();
+    finishRound(m, 2); // the roles swapped: player 2 walks
+    expect(m.phase).toBe('matchOver');
+    expect(modeSwitch(m, { t: 'mode', mode: 'race', p: 2 })).toBe('race');
+  });
+  it('solo: allowed when not playing (lobby, won, game over), refused while playing or falling', () => {
+    const m = createMatch({ mode: 'solo' });
+    expect(modeSwitch(m, { t: 'mode', mode: 'race' })).toBe('race');
+    m.start();
+    expect(modeSwitch(m, { t: 'mode', mode: 'race' })).toBe(null);
+    finishRound(m);
+    expect(m.phase).toBe('won');
+    expect(modeSwitch(m, { t: 'mode', mode: 'race' })).toBe('race');
+  });
+});
+
 describe('one controller gate per player', () => {
   it('a player whose tilt goes quiet for 500 ms is no longer live, the other still is', () => {
     const g = createPlayerGates(TILT_TIMEOUT_MS);

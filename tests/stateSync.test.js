@@ -113,10 +113,10 @@ describe('per-phone state for a match', async () => {
     expect(stateMessageFor(m, 1)).toMatchObject({ to: 1, you: 1 });
   });
 
-  it('solo adds only mode, you, role and gustReady to the old message, and routes it to the phone', () => {
+  it('solo adds only mode, you, role, gustReady and canChangeMode to the old message, and routes it to the phone', () => {
     const m = createMatch({ mode: 'solo', seed: 4 });
     const msg = stateMessageFor(m, 2); // a phone that landed in slot 2 gets the solo session's state, aimed at itself
-    expect(msg).toEqual({ ...buildStateMessage(m.sessions[1]), mode: 'solo', you: 2, role: 'walker', gustReady: false, to: 2 });
+    expect(msg).toEqual({ ...buildStateMessage(m.sessions[1]), mode: 'solo', you: 2, role: 'walker', gustReady: false, canChangeMode: true, to: 2 });
   });
 
   it('each racer gets his own session, the windmaster modes the one walker', () => {

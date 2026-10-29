@@ -14,14 +14,18 @@ export const STATUS = {
 
 const isPlayer = (n) => n === 1 || n === 2;
 
-// What this phone should show: its mode, player number and role, and whether the controls are the Wind Master's.
+// What this phone should show: its mode, player number and role, whether the controls are the Wind Master's, and whether the
+// mode picker is on screen.
 // `me` is the player number the server gave this phone at pairing; the TV's `you` wins when it sends one.
 export function viewOf(msg, me = 1) {
   const mode = MODES.includes(msg.mode) ? msg.mode : 'solo';
   const player = isPlayer(msg.you) ? msg.you : isPlayer(me) ? me : 1;
   const role = mode === 'windmaster' && msg.role === 'windmaster' ? 'windmaster' : mode === 'race' ? 'racer' : 'walker';
   const idle = msg.phase !== 'playing' && msg.phase !== 'falling'; // Start is on screen, and so is the mode picker
-  return { mode, player, role, windMaster: role === 'windmaster', gustReady: msg.gustReady === true, idle };
+  // The mode picker shows only when the TV says a change is allowed (not between the rounds of a match: it would wipe the
+  // tally). A TV that sends no flag gets the old rule, the picker whenever Start shows.
+  const canChangeMode = typeof msg.canChangeMode === 'boolean' ? msg.canChangeMode : idle;
+  return { mode, player, role, windMaster: role === 'windmaster', gustReady: msg.gustReady === true, idle, canChangeMode };
 }
 
 // The Start button's words: it always sends {t:'start'}, the TV decides what that begins.

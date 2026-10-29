@@ -116,7 +116,7 @@ function onMessage(msg) {
     showWind(msg);
     $('btn-start').hidden = !view.idle;
     $('btn-start').textContent = startLabel(msg);
-    $('modes').hidden = !view.idle;
+    $('modes').hidden = !view.canChangeMode;
     for (const b of document.querySelectorAll('.mode')) b.setAttribute('aria-pressed', String(b.dataset.mode === view.mode));
     $('btn-pause').hidden = msg.phase !== 'playing';
     $('btn-pause').textContent = msg.paused ? '▶ Resume' : '⏸ Pause';

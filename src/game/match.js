@@ -130,7 +130,7 @@ function createRace(seed, winsToWin) {
     get elapsed() { return m.elapsed; }, // seconds since this round's start(), not counting a pause
     get paused() { return sessions[1].paused; },
     gustReady: false,
-    get canChangeMode() { return m.phase !== 'playing'; },
+    get canChangeMode() { return m.phase === 'lobby' || m.phase === 'matchOver'; }, // not between rounds: a switch would wipe the tally
     walkerOf: () => null,
     windMasterOf: () => null,
     input: (player, msg) => sessions[player] !== undefined && applyInput(sessions[player], msg),
@@ -220,7 +220,7 @@ function createWindMaster(seed, rounds) {
     // Seconds until the Wind Master may send another gust: 0 when ready or when no round is running, Infinity while the
     // walker is still on the ledge (the clock has not started, so there is nothing to count down).
     get gustIn() { return gustable() ? wind.readyIn(session.time) : playing() ? Infinity : 0; },
-    get canChangeMode() { return m.phase !== 'playing'; },
+    get canChangeMode() { return m.phase === 'lobby' || m.phase === 'matchOver'; }, // not between rounds: a switch would wipe the tally
     walkerOf: () => walker,
     windMasterOf: () => other(walker),
     clearInput: (player) => player === walker && clearSessionInput(session),

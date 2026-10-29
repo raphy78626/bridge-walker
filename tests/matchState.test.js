@@ -14,7 +14,18 @@ const buildStateMessage = (s) => ({
 describe('matchStateFor', () => {
   it('solo: only mode, you, role and gustReady', () => {
     const m = createMatch({ mode: 'solo' });
-    expect(matchStateFor(m, 1)).toEqual({ mode: 'solo', you: 1, role: 'walker', gustReady: false });
+    expect(matchStateFor(m, 1)).toEqual({ mode: 'solo', you: 1, role: 'walker', gustReady: false, canChangeMode: true });
+  });
+
+  it('canChangeMode tells the phone whether to show its mode picker: lobby yes, mid-round no, in every mode', () => {
+    for (const mode of ['solo', 'race', 'windmaster']) {
+      const m = createMatch({ mode, seed: 3 });
+      expect(matchStateFor(m, 1).canChangeMode).toBe(true);
+      expect(matchStateFor(m, 2).canChangeMode).toBe(true);
+      m.start();
+      expect(matchStateFor(m, 1).canChangeMode).toBe(false);
+      expect(matchStateFor(m, 2).canChangeMode).toBe(false);
+    }
   });
 
   it('race: both players are racers, with their own phase and falls', () => {

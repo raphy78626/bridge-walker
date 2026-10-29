@@ -436,12 +436,23 @@ describe('race match', () => {
     expect(m.sessions[2].time).toBeGreaterThan(z);
   });
 
-  it('allows a mode change only between rounds', () => {
-    const m = race();
+  it('allows a mode change only in the lobby and when the match is over, not between rounds (it would wipe the tally)', () => {
+    const m = race({ winsToWin: 2 });
     expect(m.canChangeMode).toBe(true);
     m.start();
     onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m.canChangeMode).toBe(false);
+    for (let round = 1; round <= 2; round++) {
+      runUntil(m, () => m.phase !== 'playing', 120, () => { drive(m, 1); drive(m, 2, { walk: false }); });
+      if (round === 1) {
+        expect(m.phase).toBe('roundOver');
+        expect(m.canChangeMode).toBe(false);
+        m.start();
+        onBridge(m);
+      }
+    }
+    expect(m.phase).toBe('matchOver');
+    expect(m.canChangeMode).toBe(true);
   });
 });
 
@@ -714,11 +725,19 @@ describe('windmaster match', () => {
     expect(WINDMASTER_ROUNDS).toBe(4);
   });
 
-  it('allows a mode change only between rounds', () => {
-    const m = wm();
+  it('allows a mode change only in the lobby and when the match is over, not between rounds (it would wipe the scores)', () => {
+    const m = wm({ rounds: 2 });
     expect(m.canChangeMode).toBe(true);
     m.start();
     onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     expect(m.canChangeMode).toBe(false);
+    runUntil(m, () => m.phase !== 'playing', 200, () => drive(m, 1));
+    expect(m.phase).toBe('roundOver');
+    expect(m.canChangeMode).toBe(false);
+    m.start();
+    onBridge(m);
+    runUntil(m, () => m.phase !== 'playing', 200, () => drive(m, 2));
+    expect(m.phase).toBe('matchOver');
+    expect(m.canChangeMode).toBe(true);
   });
 });

@@ -3,13 +3,13 @@ import { statusText, viewOf, startLabel, roundResultText, STATUS } from '../src/
 
 describe('viewOf', () => {
   it('behaves as solo when the two-player fields are missing', () => {
-    expect(viewOf({ phase: 'playing', lives: 3, level: 1 })).toEqual({ mode: 'solo', player: 1, role: 'walker', windMaster: false, gustReady: false, idle: false });
+    expect(viewOf({ phase: 'playing', lives: 3, level: 1 })).toEqual({ mode: 'solo', player: 1, role: 'walker', windMaster: false, gustReady: false, idle: false, canChangeMode: false });
     expect(viewOf({ phase: 'lobby' }, 2)).toMatchObject({ mode: 'solo', player: 2, role: 'walker', idle: true });
   });
 
   it('ignores junk in the new fields', () => {
     expect(viewOf({ mode: 'coop', you: 7, role: 'windmaster', gustReady: 'yes', phase: 'playing' })).toEqual({
-      mode: 'solo', player: 1, role: 'walker', windMaster: false, gustReady: false, idle: false,
+      mode: 'solo', player: 1, role: 'walker', windMaster: false, gustReady: false, idle: false, canChangeMode: false,
     });
   });
 
@@ -23,6 +23,21 @@ describe('viewOf', () => {
   it('is idle (Start and the mode picker show) except while playing or falling', () => {
     for (const phase of ['lobby', 'won', 'gameover', 'roundOver', 'matchOver']) expect(viewOf({ phase }).idle).toBe(true);
     for (const phase of ['playing', 'falling']) expect(viewOf({ phase }).idle).toBe(false);
+  });
+});
+
+describe('the mode picker follows canChangeMode', () => {
+  it('shows only when the TV says a change is allowed', () => {
+    expect(viewOf({ phase: 'lobby', canChangeMode: true }).canChangeMode).toBe(true);
+    expect(viewOf({ mode: 'race', phase: 'roundOver', canChangeMode: false }).canChangeMode).toBe(false); // idle, but no picker
+    expect(viewOf({ mode: 'race', phase: 'roundOver', canChangeMode: false }).idle).toBe(true);
+    expect(viewOf({ mode: 'race', phase: 'matchOver', canChangeMode: true }).canChangeMode).toBe(true);
+    expect(viewOf({ phase: 'playing', canChangeMode: true }).canChangeMode).toBe(true); // the flag is the TV's word, not guessed
+  });
+  it('a TV that does not send it (an older one) gets the old behaviour: the picker shows when idle', () => {
+    expect(viewOf({ phase: 'lobby' }).canChangeMode).toBe(true);
+    expect(viewOf({ phase: 'playing' }).canChangeMode).toBe(false);
+    expect(viewOf({ phase: 'roundOver', canChangeMode: 'yes' }).canChangeMode).toBe(true);
   });
 });
 
