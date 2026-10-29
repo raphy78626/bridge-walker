@@ -4,8 +4,9 @@
 //   solo        one session, one phone (player 1). Exactly the session's own phases and rules.
 //   race        two sessions, same seed (identical gaps and wind). Falls cost no lives, only time. The first to the far
 //               end wins the round; the other is frozen where it stands. Every round is the next level.
-//   windmaster  one session and one controlled wind. One player walks, the other sends gusts. Roles swap after
-//               every round (a cleared level or a game over). The seeded wind is off.
+//   windmaster  one session and one controlled wind. One player walks, the other sends gusts (at least
+//               WIND_MASTER_MIN_FORCE strong). Roles swap after every round (a cleared level or a game over). The
+//               seeded wind is off.
 //
 // match.phase is 'lobby' | 'playing' | 'roundOver' | 'matchOver' in race and windmaster ('playing' includes falling
 // and respawning). In solo it is the session's own phase (lobby, playing, falling, won, gameover) so the existing
@@ -17,6 +18,10 @@ import { MODES } from '../shared/protocol.js';
 
 export const RACE_ROUNDS_TO_WIN = 3; // first to this many round wins takes the match
 export const WINDMASTER_ROUNDS = 4; // rounds in a windmaster match: each player walks twice
+// The seeded wind's peak force is tuned for a walker who must beat it (0.25 on level 1), which is far too gentle for a
+// gust a player sends on purpose: it almost never topples anyone. A Wind Master's gust is at least this strong.
+export const WIND_MASTER_MIN_FORCE = 0.7;
+export const windMasterForce = (levelMaxWind) => Math.max(levelMaxWind, WIND_MASTER_MIN_FORCE);
 
 const copy2 = (o) => ({ 1: o[1], 2: o[2] });
 
@@ -159,7 +164,7 @@ function createWindMaster(seed, rounds) {
   let wind = null; // this level's controlled wind: the session builds a fresh one each time a level begins
   const session = createSession({
     seed,
-    windSource: ({ maxForce }) => (wind = createControlledWind({ maxForce })),
+    windSource: ({ maxForce }) => (wind = createControlledWind({ maxForce: windMasterForce(maxForce) })),
   });
   const m = { phase: 'lobby', round: 1, result: null, scores: { 1: 0, 2: 0 } };
   let walker = 1; // who walks this round (or, between rounds, the next one)

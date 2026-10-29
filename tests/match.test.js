@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { createMatch, WINDMASTER_ROUNDS } from '../src/game/match.js';
+import { createMatch, WINDMASTER_ROUNDS, WIND_MASTER_MIN_FORCE, windMasterForce } from '../src/game/match.js';
 import { createSession, distanceToNextGap, START_LIVES, FALL_DURATION, WIND_WARNING_S } from '../src/game/session.js';
 import { createControlledWind, GUST_COOLDOWN_S, CONTROLLED_GUST_S } from '../src/game/wind.js';
 import { forecastAt } from '../src/game/forecast.js';
-import { difficulty } from '../src/game/difficulty.js';
+import { difficulty, MAX_WIND } from '../src/game/difficulty.js';
 import { WIND_MASTER_FALL_POINTS } from '../src/game/scoring.js';
 
 const DT = 1 / 60;
@@ -381,6 +381,29 @@ describe('windmaster match', () => {
     }
     expect([...seen]).toEqual(['warning', 'gust', 'calm']);
     expect(pushedLeft).toBe(true);
+  });
+
+  it('gusts have a floor: level 1 (maxWind 0.25) still blows at WIND_MASTER_MIN_FORCE', () => {
+    expect(difficulty(1).maxWind).toBeLessThan(WIND_MASTER_MIN_FORCE);
+    const m = wm();
+    m.start();
+    m.input(2, { t: 'gust', dir: 1 });
+    m.update(DT);
+    expect(m.sessions[1].forecast.strength).toBeCloseTo(WIND_MASTER_MIN_FORCE / MAX_WIND, 6);
+    // ...and it really pushes: the peak of a floor-strength gust shoves the lean harder than level 1's own 0.25 could
+    const lean = (force) => {
+      const w = createControlledWind({ maxForce: force });
+      w.trigger(1, 0);
+      return w.force(WIND_WARNING_S + 0.75);
+    };
+    expect(lean(WIND_MASTER_MIN_FORCE)).toBeGreaterThan(2.5 * lean(difficulty(1).maxWind));
+  });
+
+  it('a level whose own maxWind is above the floor keeps it', () => {
+    expect(difficulty(6).maxWind).toBeGreaterThan(WIND_MASTER_MIN_FORCE);
+    expect(windMasterForce(difficulty(6).maxWind)).toBe(difficulty(6).maxWind);
+    expect(windMasterForce(difficulty(1).maxWind)).toBe(WIND_MASTER_MIN_FORCE);
+    expect(windMasterForce(MAX_WIND)).toBe(MAX_WIND);
   });
 
   it('a gust that blows pushes the walker the way it points', () => {
