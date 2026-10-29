@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { buildStateMessage, createStateSync } from '../src/tv/stateSync.js';
 import { STATUS, statusText } from '../src/phone/status.js';
+import { onBridge } from './helpers/onBridge.js';
 
 const base = { phase: 'playing', lives: 3, level: 1 };
 const fc = (state, dir = 1, strength = 0.5) => ({ state, dir, strength, eta: 1, remaining: 2 });
 
 describe('state message', () => {
   it('keeps the old fields and adds the wind, calm by default', () => {
-    expect(buildStateMessage(base)).toEqual({ t: 'state', phase: 'playing', lives: 3, level: 1, paused: false, wind: 'calm', windDir: 0, windLevel: 0 });
+    expect(buildStateMessage(base)).toEqual({ t: 'state', phase: 'playing', lives: 3, level: 1, paused: false, keepMoving: false, wind: 'calm', windDir: 0, windLevel: 0 });
   });
 
   it('carries the forecast state and direction', () => {
@@ -106,6 +107,7 @@ describe('per-phone state for a match', async () => {
   it('is the session message with the match fields over it, aimed at that phone only', () => {
     const m = createMatch({ mode: 'race', seed: 4 });
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     const msg = stateMessageFor(m, 2);
     expect(msg).toMatchObject({ t: 'state', to: 2, mode: 'race', you: 2, role: 'racer', phase: 'playing', round: 1, level: 1 });
     expect(stateMessageFor(m, 1)).toMatchObject({ to: 1, you: 1 });
@@ -129,6 +131,7 @@ describe('per-phone state for a match', async () => {
   it('a race phone is told about its own fall and nobody else is', () => {
     const m = createMatch({ mode: 'race', seed: 4 });
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     const syncs = { 1: createStateSync(), 2: createStateSync() };
     for (const p of [1, 2]) expect(syncs[p].changed(sessionFor(m, p), m)).toBe(true);
     for (const p of [1, 2]) expect(syncs[p].changed(sessionFor(m, p), m)).toBe(false);
@@ -144,6 +147,7 @@ describe('per-phone state for a match', async () => {
     expect(sync.changed(wm.sessions[1], wm)).toBe(true);
     expect(sync.changed(wm.sessions[1], wm)).toBe(false);
     wm.start();
+    onBridge(wm); // levels start on the safe ledge; these tests begin on the first plank
     sync.changed(wm.sessions[1], wm);
     for (let i = 0; i < 30; i++) wm.update(DT);
     expect(wm.gustReady).toBe(true);
@@ -162,6 +166,7 @@ describe('per-phone state for a match', async () => {
   it('a race round ending is a change even though no session phase moved but one', () => {
     const m = createMatch({ mode: 'race', seed: 4, winsToWin: 3 });
     m.start();
+    onBridge(m); // levels start on the safe ledge; these tests begin on the first plank
     const sync = createStateSync();
     sync.changed(sessionFor(m, 1), m);
     m.sessions[1].walker = { ...m.sessions[1].walker, z: 59.99, speed: 2 };

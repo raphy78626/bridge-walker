@@ -1,11 +1,12 @@
 // The {t:'state'} message the TV sends the phone, and the check for when it has changed. The game loop calls
 // changed() every frame without allocating, and message() only when it returned true.
 //
-// Fields: phase, lives, level, paused (always), wind ('calm'|'warning'|'gust'), windDir (-1|0|1) and windLevel (0 calm,
+// Fields: phase, lives, level, paused, keepMoving (always), wind ('calm'|'warning'|'gust'), windDir (-1|0|1) and windLevel (0 calm,
 // 1..3 the gust's strength bucket, the same three steps as the TV's wind arrow) from the forecast,
 // and after a level stars, score and runScore from the result (runScore also at game over).
 import { forecastOf, windLevelOf } from './windFx.js';
 import { matchStateFor } from '../game/matchState.js';
+import { keepMovingOf } from './keepMoving.js';
 
 // The session a phone's status belongs to: its own in a race, the one walker's in every other mode.
 export const sessionFor = (match, player) => (match.mode === 'race' ? match.sessions[player] : match.sessions[1]);
@@ -31,6 +32,7 @@ export function buildStateMessage(session) {
     wind: f.state,
     windDir: f.dir || 0,
     windLevel: windLevelOf(f),
+    keepMoving: keepMovingOf(session), // standing still on the bridge for too long: the phone says so too
   };
   if (r && r.kind === 'level') {
     msg.stars = r.stars;
@@ -46,12 +48,13 @@ export function buildStateMessage(session) {
 // watches what only a two-player match changes: the mode and role, the match phase (a round is over while a session is
 // still 'playing'), the round, the tally, the scores, this racer's falls, the Wind Master's gust readiness and the result.
 export function createStateSync() {
-  let phase, lives, level, paused, wind, windDir, windLevel, stars, score, runScore;
+  let phase, lives, level, paused, wind, windDir, windLevel, stars, score, runScore, keepMoving;
   let mode, matchPhase, role, gustReady, round, tally1, tally2, scores1, scores2, falls, matchResult;
   let seen = false;
   return {
     // True when anything the phone shows differs from the last message built. Updates what it compares against.
     changed(session, match = null) {
+      const nextKeep = keepMovingOf(session);
       const nextMode = match ? match.mode : undefined;
       const nextMatchPhase = match && match.mode !== 'solo' ? match.phase : undefined;
       const nextRole = match ? match.walkerOf() : undefined; // who walks (windmaster); null elsewhere
@@ -84,6 +87,7 @@ export function createStateSync() {
         stars === nextStars &&
         score === nextScore &&
         runScore === nextRun &&
+        keepMoving === nextKeep &&
         mode === nextMode &&
         matchPhase === nextMatchPhase &&
         role === nextRole &&
@@ -105,6 +109,7 @@ export function createStateSync() {
       stars = nextStars;
       score = nextScore;
       runScore = nextRun;
+      keepMoving = nextKeep;
       mode = nextMode;
       matchPhase = nextMatchPhase;
       role = nextRole;
