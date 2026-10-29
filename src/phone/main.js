@@ -1,6 +1,6 @@
 import { connect } from '../shared/client.js';
 import { createTiltReader } from './tilt.js';
-import { createGustTrigger, windIndicator } from '../tv/windFx.js'; // pure helpers, no three.js
+import { createGustTrigger, strengthOfLevel, windIndicator } from '../tv/windFx.js'; // pure helpers, no three.js
 import { statusText } from './status.js';
 
 const SIGN_KEY = 'bridge.tiltSign';
@@ -104,17 +104,18 @@ function onMessage(msg) {
   }
 }
 
-// A small arrow next to the balance meter while a gust is coming or blowing, one buzz per warning (Android only).
+// A small arrow next to the balance meter while a gust is coming or blowing, sized and buzzing by the gust's strength
+// bucket (msg.windLevel, 1..3, from the TV), one buzz per warning (Android only).
 function showWind(msg) {
-  const ind = windIndicator({ state: msg.wind, dir: msg.windDir, strength: 0.6 });
+  const ind = windIndicator({ state: msg.wind, dir: msg.windDir, strength: strengthOfLevel(msg.windLevel) });
   for (const side of ['left', 'right']) {
     const chip = $(`wind-${side}`);
     const on = ind.visible && ind.from === side;
     chip.hidden = !on;
-    chip.className = on ? `wind-chip ${ind.state}` : 'wind-chip';
+    chip.className = on ? `wind-chip ${ind.state} lvl-${ind.level}` : 'wind-chip';
   }
-  $('wind-text').textContent = ind.visible ? 'WIND' : '';
-  if (gusts.update({ state: msg.wind, dir: msg.windDir })) navigator.vibrate?.(40);
+  $('wind-text').textContent = ind.visible ? (ind.level === 3 ? 'STRONG WIND' : 'WIND') : '';
+  if (gusts.update({ state: msg.wind, dir: msg.windDir })) navigator.vibrate?.(20 + 20 * ind.level);
 }
 
 function startCalibration() {

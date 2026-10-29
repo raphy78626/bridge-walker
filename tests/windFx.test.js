@@ -9,6 +9,8 @@ import {
   streakOpacity,
   streakSpeed,
   strengthLevel,
+  strengthOfLevel,
+  windLevelOf,
   warningProgress,
   windIndicator,
   windRamp,
@@ -80,6 +82,24 @@ describe('wind indicator state', () => {
 
   it('does not allocate: results are frozen shared objects', () => {
     expect(Object.isFrozen(windIndicator(gust(1, 1)))).toBe(true);
+  });
+});
+
+describe('strength bucket for the phone', () => {
+  it('is 0 unless the wind is live with a direction, else the 1..3 step', () => {
+    expect(windLevelOf(undefined)).toBe(0);
+    expect(windLevelOf(CALM)).toBe(0);
+    expect(windLevelOf(warn(0, 1))).toBe(0);
+    expect(windLevelOf(warn(1, 0.1))).toBe(1);
+    expect(windLevelOf(warn(1, 0.6))).toBe(2);
+    expect(windLevelOf(gust(-1, 0.9))).toBe(3);
+  });
+
+  it('maps back to a strength that lands in the same bucket, and unknown reads as medium', () => {
+    for (const level of [1, 2, 3]) expect(strengthLevel(strengthOfLevel(level))).toBe(level);
+    expect(strengthLevel(strengthOfLevel(undefined))).toBe(2);
+    expect(strengthLevel(strengthOfLevel(0))).toBe(2);
+    expect(strengthLevel(strengthOfLevel(9))).toBe(2);
   });
 });
 

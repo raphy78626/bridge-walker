@@ -7,12 +7,22 @@ const fc = (state, dir = 1, strength = 0.5) => ({ state, dir, strength, eta: 1, 
 
 describe('state message', () => {
   it('keeps the old fields and adds the wind, calm by default', () => {
-    expect(buildStateMessage(base)).toEqual({ t: 'state', phase: 'playing', lives: 3, level: 1, paused: false, wind: 'calm', windDir: 0 });
+    expect(buildStateMessage(base)).toEqual({ t: 'state', phase: 'playing', lives: 3, level: 1, paused: false, wind: 'calm', windDir: 0, windLevel: 0 });
   });
 
   it('carries the forecast state and direction', () => {
     const m = buildStateMessage({ ...base, forecast: fc('warning', -1) });
     expect(m).toMatchObject({ wind: 'warning', windDir: -1 });
+  });
+
+  it('carries the strength bucket 1..3 while the wind is live, 0 when calm or without a direction', () => {
+    const level = (f) => buildStateMessage({ ...base, forecast: f }).windLevel;
+    expect(level(fc('warning', 1, 0.2))).toBe(1);
+    expect(level(fc('warning', 1, 0.5))).toBe(2);
+    expect(level(fc('gust', -1, 1))).toBe(3);
+    expect(level(fc('calm', 0, 0))).toBe(0);
+    expect(level(fc('warning', 0, 1))).toBe(0);
+    expect(buildStateMessage(base).windLevel).toBe(0);
   });
 
   it('adds stars, score and runScore after a level, and the run score at game over', () => {
@@ -33,7 +43,10 @@ describe('state sync (send on change only)', () => {
     expect(sync.changed({ ...base })).toBe(false);
     expect(sync.changed({ ...base, time: 12, forecast: fc('calm', 0) })).toBe(false); // per-frame fields do not count
     expect(sync.changed({ ...base, forecast: fc('warning') })).toBe(true);
-    expect(sync.changed({ ...base, forecast: fc('warning', 1, 0.9) })).toBe(false); // strength alone: no message
+    expect(sync.changed({ ...base, forecast: fc('warning', 1, 0.52) })).toBe(false); // same bucket: no message
+    expect(sync.changed({ ...base, forecast: fc('warning', 1, 0.9) })).toBe(true); // a bigger bucket
+    expect(sync.changed({ ...base, forecast: fc('warning', 1, 0.95) })).toBe(false);
+    expect(sync.changed({ ...base, forecast: fc('warning') })).toBe(true); // and back down
     expect(sync.changed({ ...base, forecast: fc('gust') })).toBe(true);
     expect(sync.changed({ ...base, forecast: fc('gust', -1) })).toBe(true); // the side changed
     expect(sync.changed(base)).toBe(true); // back to calm

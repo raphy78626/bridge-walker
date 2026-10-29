@@ -66,6 +66,18 @@ export function strengthLevel(strength) {
   return s < 0.4 ? 1 : s < 0.75 ? 2 : 3;
 }
 
+// The bucket the TV sends the phone in its state message: 0 while calm (or with no direction), else strengthLevel 1..3.
+export function windLevelOf(f) {
+  return f && isLive(f) && f.dir ? strengthLevel(f.strength) : 0;
+}
+
+// A strength that falls in the given bucket, for the phone, which only hears the bucket. Anything unknown reads as
+// medium (the same default as an unknown strength).
+const LEVEL_STRENGTH = [0.6, 0.25, 0.55, 0.9];
+export function strengthOfLevel(level) {
+  return LEVEL_STRENGTH[level] ?? 0.6;
+}
+
 // What the HUD's wind indicator shows. The result is one of a few shared frozen objects (no allocation per frame),
 // so the HUD can compare by reference and touch the DOM only when it changes:
 //   { visible, state, from, level }  from: 'left' | 'right', the screen edge the wind blows in from.

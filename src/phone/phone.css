@@ -120,6 +120,8 @@ html, body {
 .wind-chip { flex: none; width: 34px; height: 16px; color: #ffb020; }
 .wind-chip[hidden] { display: block; visibility: hidden; } /* keeps its space, so the meter never jumps */
 .wind-chip svg { display: block; width: 100%; height: 100%; fill: currentColor; }
+.wind-chip.lvl-1 svg { transform: scale(0.75); }
+.wind-chip.lvl-3 svg { transform: scale(1.15); }
 .wind-chip.warning { animation: wind-blink 0.45s ease-in-out infinite alternate; }
 .wind-chip.gust { transform: scale(1.35); filter: drop-shadow(0 0 6px #ffb020); }
 .wind-text { min-height: 1.1em; color: #ffb020; font-weight: 800; letter-spacing: 0.12em; font-size: 0.8rem !important; }
