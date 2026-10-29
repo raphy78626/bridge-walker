@@ -9,7 +9,9 @@ export { distanceToNextGap, MAX_WIND, WIND_WARNING_S };
 
 export const BRIDGE_LENGTH = 60; // metres
 export const START_LIVES = 3;
-export const FALL_DURATION = 2.5; // seconds the fall animation plays before respawn
+// Seconds from a fall to the respawn: long enough to see him drop out of sight (12 m down by then), short enough that
+// losing a life does not stall the game (it was 2.5 s, which felt like a wait).
+export const FALL_DURATION = 1.6;
 const GAP_RESPAWN_BACK = 1.5; // metres before the gap you fell into that you get put back
 // Each level starts on the rock ledge before the bridge: solid ground, a safe place to get ready. The level timer
 // (and with it the wind) only starts once he steps onto the bridge.
