@@ -17,6 +17,7 @@ import { recordLevel, recordRun, resultView, sameResult } from './results.js';
 import { createStateSync, sessionFor, stateMessageFor } from './stateSync.js';
 import { CAMERA_LABELS, loadCameraMode, saveCameraMode } from './cameras.js';
 import { loadRoom, saveRoom } from './roomMemory.js';
+import { createFixedStep } from '../game/fixedStep.js';
 
 const newMatch = (mode) => createMatch({ mode, seed: Date.now() % 100000 });
 let match = newMatch('solo'); // solo until a phone picks another mode (and replaced by a new match when it does)
@@ -273,6 +274,8 @@ let prev = performance.now();
 let levelPhase = flowPhase(match); // last phase seen, for the level transitions
 let panelPhase = match.phase; // and for the pairing panel, which hides when a round starts
 let audioPaused = false; // match.paused as the audio last heard it
+const gameSteps = createFixedStep();
+const updateMatch = (step) => match.update(step); // made once (the loop allocates nothing per frame); match changes with the mode
 let frames = 0;
 let fpsSince = prev;
 function frame(now) {
@@ -295,8 +298,10 @@ function frame(now) {
       match.clearInput(p);
     }
   }
-  // Paused while a phone the game needs is not paired (solo: any one; race and Wind Master: both).
-  if (links.ready()) match.update(dt);
+  // Paused while a phone the game needs is not paired (solo: any one; race and Wind Master: both). The game runs in fixed
+  // steps (fixedStep.js), so it plays the same at any frame rate; the drawing below still uses the frame's own dt.
+  if (links.ready()) gameSteps.advance(dt, updateMatch);
+  else gameSteps.reset();
   if (match.paused !== audioPaused) {
     audioPaused = match.paused; // sound freezes with the game, so a gust whoosh resumes in step with its warning
     audio.setPaused(audioPaused);
