@@ -178,14 +178,14 @@ describe('gaps', () => {
     expect(gapsFor(5, 2)).toHaveLength(4);
     expect(gapsFor(5, 4)).toHaveLength(6);
     expect(gapsFor(5, 5)).toHaveLength(7);
-    expect(gapsFor(5, 20)).toHaveLength(7); // 8 gaps of 1.2 m with 6 m between do not fit in 8..55
+    expect(gapsFor(5, 20)).toHaveLength(7); // 8 gaps of 1.25 m with 6 m between do not fit in 8..55
   });
 
-  it('sizes each gap at min(0.9 + 0.1 * level, 1.2), always below a standing jump', () => {
-    for (const [level, len] of [[1, 1.0], [2, 1.1], [3, 1.2], [4, 1.2], [9, 1.2]]) {
+  it('sizes each gap at min(0.9 + 0.1 * level, 1.25), always below a standing jump', () => {
+    for (const [level, len] of [[1, 1.0], [2, 1.1], [3, 1.2], [4, 1.25], [9, 1.25]]) {
       for (const g of gapsFor(5, level)) {
         expect(g.end - g.start).toBeCloseTo(len, 6);
-        expect(g.end - g.start).toBeLessThan(STAND_JUMP);
+        expect(STAND_JUMP - (g.end - g.start)).toBeGreaterThanOrEqual(0.7);
       }
     }
   });

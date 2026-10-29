@@ -1,13 +1,13 @@
 import { createWalker, stepWalker } from './balance.js';
 import { createWind } from './wind.js';
 import { generateGaps, gapAt, distanceToNextGap } from './gaps.js';
+import { difficulty, MAX_WIND } from './difficulty.js';
 
-export { distanceToNextGap };
+export { distanceToNextGap, MAX_WIND };
 
 export const BRIDGE_LENGTH = 60; // metres
 export const START_LIVES = 3;
 export const FALL_DURATION = 2.5; // seconds the fall animation plays before respawn
-const MAX_WIND = 1.2; // keeps every level winnable: full tilt pushes back 3.0
 const GAP_RESPAWN_BACK = 1.5; // metres before the gap you fell into that you get put back
 
 export function createSession({ seed = 1 } = {}) {
@@ -36,7 +36,7 @@ export function createSession({ seed = 1 } = {}) {
       s.walker = createWalker();
       s.gaps = generateGaps(seed, s.level, BRIDGE_LENGTH);
       s.fallCause = null;
-      wind = createWind({ seed: seed + s.level, maxForce: Math.min(MAX_WIND, 0.15 + 0.1 * s.level) });
+      wind = createWind({ seed: seed + s.level, maxForce: difficulty(s.level).maxWind });
       enter('playing');
     },
 

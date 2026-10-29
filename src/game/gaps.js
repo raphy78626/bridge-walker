@@ -1,4 +1,5 @@
 import { mulberry32 } from './rng.js';
+import { difficulty } from './difficulty.js';
 
 const FIRST_START = 8; // metres: no gap in the first stretch of bridge
 const END_MARGIN = 5; // the last gap starts at least this far from the far side
@@ -10,11 +11,8 @@ const SALT = 0x5bd1e995; // keeps the layout's random stream apart from the wind
 const mm = (x) => Math.round(x * 1000) / 1000;
 
 // Eased for real players after TV play tests (was capped at 1.3 m): a walking jump clears 1.96 m, so the
-// worst-case take-off window at the 1.2 m cap is about 0.76 m.
-export const gapLength = (level) => mm(Math.min(0.9 + 0.1 * level, 1.2));
-
-// Gaps wanted at this level, before checking they all fit on the bridge.
-const wantedCount = (level) => Math.min(2 + level, 7);
+// worst-case take-off window at the 1.25 m cap is about 0.71 m (see difficulty.js).
+export const gapLength = (level) => difficulty(level).gapLength;
 
 // Returns a fresh, ascending array of { start, end } in metres along the bridge. Same seed and level, same layout.
 export function generateGaps(seed, level, bridgeLength) {
@@ -23,7 +21,7 @@ export function generateGaps(seed, level, bridgeLength) {
   const pitch = len + PLAN_SPACING;
   // A bridge can only hold so many gaps with 6 m between them (8 gaps of 1.2 m would need > 58 m of starts).
   const fits = Math.floor((lastStart - FIRST_START) / pitch) + 1;
-  const count = Math.max(0, Math.min(wantedCount(level), fits));
+  const count = Math.max(0, Math.min(difficulty(level).gapCount, fits));
 
   const rand = mulberry32((seed + level) ^ SALT);
   // Spread the leftover room: sorted random offsets never shrink the spacing and never pass lastStart.
