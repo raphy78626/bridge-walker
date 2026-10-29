@@ -28,11 +28,11 @@ export function warningProgress(f) {
 export function windRamp(f) {
   if (!f || !f.dir) return 0;
   if (f.state === 'gust') return 1;
-  if (f.state === 'warning') return 0.2 + 0.4 * warningProgress(f);
+  if (f.state === 'warning') return 0.3 + 0.35 * warningProgress(f);
   return 0;
 }
 
-export const STREAK_MAX_OPACITY = 0.55;
+export const STREAK_MAX_OPACITY = 0.75;
 // Opacity of the wind streaks: invisible when calm, faint through the warning, strongest in the gust.
 export function streakOpacity(f) {
   const ramp = windRamp(f);
