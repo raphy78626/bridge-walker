@@ -22,7 +22,7 @@ export function buildEnvironment(scene, renderer, { theme, seed = CLASSIC_SEED, 
   const aniso = lite ? 1 : Math.min(renderer.capabilities.getMaxAnisotropy(), 4);
   scene.fog = new THREE.Fog(theme.fog.color, theme.fog.near, theme.fog.far);
 
-  const skyBaker = createSkyBaker(scene, renderer);
+  const skyBaker = createSkyBaker(scene, renderer, lite);
   const rock = rockMaterial(aniso, lite);
   const cliffs = new THREE.Mesh(new THREE.BufferGeometry(), rock);
   cliffs.frustumCulled = false; // one big merged mesh, always on screen
@@ -149,7 +149,13 @@ function loadSet(name, aniso, repeat, { mapOnly = false } = {}) {
 // between levels, so render it once per theme: into a cube map for the background, and (without the sun disc) for
 // lighting. The grade patch below (warm horizon, deep zenith) reads its colours from uniforms, so every theme can
 // reuse the one compiled shader. Night swaps in a plain dark gradient with a moon disc instead of Preetham.
-function createSkyBaker(scene, renderer) {
+// lite (TV): the image-based lighting is prefiltered (PMREM) from a tiny copy of the sky, into the same target every time.
+// Measured on an LG TV: PMREM from the sky at full size held the GPU for ~550 ms, a frame that froze a few frames after
+// every look change (drawing the sky cube itself was cheap). Its cost grows with the input; the light it gives the soldier
+// and the bridge is soft anyway, so 32 per face is plenty. The rock has its lighting baked in and does not use it.
+const SKY_CUBE = 512;
+const ENV_CUBE_LITE = 32;
+function createSkyBaker(scene, renderer, lite = false) {
   const grade = {
     uWarm: { value: new THREE.Vector4() },
     uHue: { value: 0 },
@@ -182,10 +188,12 @@ function createSkyBaker(scene, renderer) {
   const night = nightSky();
   const envScene = new THREE.Scene();
   envScene.add(sky, night.mesh);
-  const background = new THREE.WebGLCubeRenderTarget(512, { type: THREE.HalfFloatType }); // half float keeps the bright sun side
+  const background = new THREE.WebGLCubeRenderTarget(SKY_CUBE, { type: THREE.HalfFloatType }); // half float keeps the bright sun side
   const cubeCamera = new THREE.CubeCamera(0.1, 1000, background);
   scene.background = background.texture;
   const pmrem = new THREE.PMREMGenerator(renderer); // kept: its blur shaders compile once
+  const envCube = lite ? new THREE.WebGLCubeRenderTarget(ENV_CUBE_LITE, { type: THREE.HalfFloatType }) : null;
+  const envCamera = lite ? new THREE.CubeCamera(0.1, 1000, envCube) : null;
   let envTarget = null;
 
   return {
@@ -207,7 +215,13 @@ function createSkyBaker(scene, renderer) {
         night.set(s, theme.sun.dir);
       }
       cubeCamera.update(renderer, envScene);
-      // Image-based lighting from the same sky.
+      // Image-based lighting from the same sky. Lite: from a tiny cube of it, into the same target each time.
+      if (lite) {
+        envCamera.update(renderer, envScene);
+        envTarget = pmrem.fromCubemap(envCube.texture, envTarget);
+        scene.environment = envTarget.texture;
+        return;
+      }
       const previous = envTarget;
       envTarget = pmrem.fromScene(envScene, 0, 0.1, 1000);
       scene.environment = envTarget.texture;
