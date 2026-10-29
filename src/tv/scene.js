@@ -1,16 +1,19 @@
 import * as THREE from 'three';
 import { buildEnvironment } from './environment.js';
-import { nextQuality, TV_QUALITY } from './quality.js';
-import { createWalker } from './walker.js';
-import { THEMES } from './themes.js';
-import { createWindStreaks } from './windStreaks.js';
-import { CALM, easeToward, forecastOf, streakOpacity, streakSpeed, windSway } from './windFx.js';
+import { createAdaptiveQuality } from './adaptiveQuality.js';
 import { createCameraRig } from './cameraRig.js';
+import { createLighting } from './lighting.js';
+import { THEMES } from './themes.js';
+import { createWalker } from './walker.js';
+import { createWindStreaks } from './windStreaks.js';
+import { createWindView } from './windView.js';
 
 const NO_GAPS = [];
 // ?tv previews the TV variant (cheaper materials and quality rules) on a desktop browser.
 const IS_TV = /SmartTV|Web0S|NetCast|Tizen/i.test(navigator.userAgent) || new URLSearchParams(location.search).has('tv');
 
+// The composer main.js uses: the renderer and the camera, with the parts that each own one job (the environment,
+// the lights, the walker, the camera rig, the wind's look) wired together once per frame in render().
 // World layout: the walker starts at z = 0 and walks toward -z. x is right, y is up.
 export function createScene(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !IS_TV }); // MSAA is costly on TV GPUs
@@ -27,42 +30,16 @@ export function createScene(canvas) {
   const streaks = createWindStreaks();
   camera.add(streaks.mesh);
   scene.add(camera);
-  // The smoothed look of the wind: the forecast flips between states, the picture eases between them.
-  let windOpacity = 0;
-  let windSpeed = 0;
-  let windSwayNow = 0;
-  let windDir = 1; // the last gust's direction, held while the streaks fade out
-
-  // the sky's image-based light does most of the fill now; the hemisphere only lifts the shadows a little
-  const hemi = new THREE.HemisphereLight();
-  scene.add(hemi);
-  const fill = new THREE.DirectionalLight(); // sky bounce on the side the camera sees, so the walker stays readable
-  fill.position.set(3, 8, 12);
-  scene.add(fill);
-  const sun = new THREE.DirectionalLight();
-  const sunOffset = new THREE.Vector3(); // sun.position relative to the walker: the theme's sun direction * 100
-  sun.castShadow = !IS_TV;
-  sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 60, far: 140 });
-  sun.shadow.bias = -0.0005;
-  sun.shadow.normalBias = 0.02;
-  scene.add(sun, sun.target);
-  applyLights(theme);
-  // Desktop: shadows are switched through sun.castShadow (one shader rebuild). Clearing renderer.shadowMap.enabled
-  // instead would leave the sun's shadow map bound and stamped on the planks, saving nothing.
-  const adaptQuality = createAdaptiveQuality(renderer, (on) => (sun.castShadow = on));
-
-  function applyLights(t) {
-    hemi.color.set(t.hemi.sky);
-    hemi.groundColor.set(t.hemi.ground);
-    hemi.intensity = t.hemi.intensity;
-    fill.color.set(t.fill.color);
-    fill.intensity = t.fill.intensity;
-    sun.color.set(t.sun.color);
-    sun.intensity = t.sun.intensity;
-    sunOffset.set(...t.sun.dir).normalize().multiplyScalar(100);
-    renderer.toneMappingExposure = t.exposure;
-  }
+  const wind = createWindView();
+  const lighting = createLighting(scene, renderer, { isTV: IS_TV, theme });
+  const adaptQuality = createAdaptiveQuality(renderer, lighting.setShadows, IS_TV);
+  const cameraRig = createCameraRig(camera);
+  const walker = createWalker(scene, { isTV: IS_TV });
+  // A TV has no developer tools of its own; with `ares-inspect` attached, this handle lets a remote
+  // console toggle scene parts and render scale live to find what the TV's GPU struggles with.
+  window.__bridge = { THREE, renderer, scene, camera, quality: adaptQuality, setTheme };
+  let lastT = null;
+  let gameT = 0; // the scene's own clock: it advances by dt, which is 0 while paused, so nothing that moves with it keeps going
 
   // Re-bakes the look for a theme (themes.js): sky cube and PMREM, fog, lights, the lite rock's vertex lighting,
   // clouds, waterfalls, birds and stars. The bake is a one-off hitch (the sky is 6 cube faces plus PMREM), so main.js
@@ -70,7 +47,7 @@ export function createScene(canvas) {
   function setTheme(next) {
     if (!next || next.id === theme.id) return;
     const t0 = performance.now();
-    applyLights(next);
+    lighting.apply(next);
     env.setTheme(next);
     renderer.getContext().finish(); // wait for the GPU, so the time below is the real cost, not just the queueing
     const ms = performance.now() - t0;
@@ -78,15 +55,6 @@ export function createScene(canvas) {
     window.reportToServer?.('theme', `${theme.id} -> ${next.id} ${ms.toFixed(0)} ms`);
     theme = next;
   }
-
-  const cameraRig = createCameraRig(camera);
-
-  const walker = createWalker(scene, { isTV: IS_TV });
-  // A TV has no developer tools of its own; with `ares-inspect` attached, this handle lets a remote
-  // console toggle scene parts and render scale live to find what the TV's GPU struggles with.
-  window.__bridge = { THREE, renderer, scene, camera, quality: adaptQuality, setTheme };
-  let lastT = null;
-  let gameT = 0; // the scene's own clock: it advances by dt, which is 0 while paused, so nothing that moves with it keeps going
 
   function resize() {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -99,7 +67,6 @@ export function createScene(canvas) {
   return {
     render(s, t) {
       const w = s.walker;
-      const z = -w.z;
       const dt = lastT === null || s.paused ? 0 : Math.min(Math.max(t - lastT, 0), 0.05); // paused: the soldier, streaks and sway hold still
       lastT = t;
       gameT += dt;
@@ -108,21 +75,14 @@ export function createScene(canvas) {
         gapsApplied = gaps;
         env.setGaps(gaps);
       }
-      sun.position.set(sunOffset.x, sunOffset.y, z + sunOffset.z); // shadow box follows the walker
+      lighting.follow(-w.z);
       env.update(gameT, camera); // clouds, water, birds and the cloth/rope ripple (uWindTime) all stand still in a pause
-      // Wind: ease toward what the forecast asks for, then hand it to the ropes and the streaks (no allocation here).
-      const f = forecastOf(s);
-      const calm = f === CALM || f.state === 'calm';
-      windOpacity = easeToward(windOpacity, streakOpacity(f), dt, calm ? 3 : 6);
-      windSpeed = easeToward(windSpeed, streakSpeed(f), dt, calm ? 2 : 4);
-      windSwayNow = easeToward(windSwayNow, windSway(f), dt, calm ? 2.5 : 5);
-      if (f.dir) windDir = f.dir > 0 ? 1 : -1;
-      env.setWind(windSwayNow);
-      sun.target.position.set(0, 0, z);
+      wind.update(s, dt); // eases toward what the forecast asks for; the ropes and the streaks follow (no allocation)
+      env.setWind(wind.sway);
       walker.setVisible(s.phase !== 'gameover' && cameraRig.mode !== 'pov'); // first person: nothing may block the eye
       walker.update(w, s.phase, s.phaseTime, s.fallCause, s.input, dt, gameT);
-      cameraRig.update(walker.focus, windSwayNow, dt, gameT);
-      streaks.update(dt, windOpacity, windSpeed, windDir, camera); // after the camera's fov is settled for this view
+      cameraRig.update(walker.focus, wind.sway, dt, gameT);
+      streaks.update(dt, wind.opacity, wind.speed, wind.dir, camera); // after the camera's fov is settled for this view
       adaptQuality();
       renderer.render(scene, camera);
     },
@@ -139,33 +99,4 @@ export function createScene(canvas) {
       return adaptQuality.describe();
     },
   };
-}
-
-// TV GPUs vary wildly. Every 2 s, trade resolution (and then shadows) for a smooth frame rate,
-// and win them back when there is headroom. The rules live in quality.js.
-function createAdaptiveQuality(renderer, setShadows) {
-  const options = IS_TV ? TV_QUALITY : { maxScale: Math.min(window.devicePixelRatio, 1.5) };
-  let state = { scale: Math.min(IS_TV ? TV_QUALITY.startScale : 1, options.maxScale), shadows: !IS_TV, goodStreak: 0 };
-  let frames = 0;
-  // Ignore the first seconds: loading the model, textures and sounds and compiling shaders stalls a TV
-  // to ~11 fps for about 8 s, which would otherwise knock it straight down to the floor with shadows off.
-  let since = performance.now() + 10000;
-  renderer.setPixelRatio(state.scale);
-  function adapt() {
-    if (adapt.paused) return; // set during remote profiling
-    const now = performance.now();
-    if (now < since) return;
-    frames += 1;
-    if (now - since < 2000) return;
-    const fps = (frames * 1000) / (now - since);
-    frames = 0;
-    since = now;
-    const next = nextQuality(fps, state, options);
-    // setPixelRatio reallocates the drawing buffer, and a shadow switch rebuilds shaders: only when it changed.
-    if (next.scale !== state.scale) renderer.setPixelRatio(next.scale);
-    if (next.shadows !== state.shadows) setShadows(next.shadows);
-    state = next;
-  }
-  adapt.describe = () => `scale=${state.scale.toFixed(1)} shadows=${state.shadows}`;
-  return adapt;
 }
