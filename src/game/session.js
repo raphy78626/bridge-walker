@@ -54,7 +54,10 @@ export function createSession({ seed = 1, infiniteLives = false, windSource = nu
 
     // Freezes a level in progress where it stands (the race loser). start() brings it back.
     halt() {
-      if (s.phase === 'playing' || s.phase === 'falling') s.halted = true;
+      if (s.phase === 'playing' || s.phase === 'falling') {
+        s.halted = true;
+        s.forecast = calmForecast(); // the round is over for this lane: no WIND warning lingering on the results
+      }
     },
 
     // opts (used by the match, which decides the level and the lives): { level, lives, runScore } override what

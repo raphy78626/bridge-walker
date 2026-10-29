@@ -143,6 +143,17 @@ describe('session options', () => {
     onBridge(s); // levels start on the safe ledge; these tests begin on the first plank
     expect(s).toMatchObject({ halted: false, time: 0 });
   });
+
+  it('halt() calms the forecast: a lane stopped mid-gust must not keep its WIND warning on the results', () => {
+    const s = createSession({ seed: 5 });
+    s.start();
+    onBridge(s);
+    s.input.walking = true;
+    for (let i = 0; i < 1800 && s.forecast.state === 'calm'; i++) { s.input.tilt = steady(s.walker); s.update(DT); }
+    expect(s.forecast.state).not.toBe('calm');
+    s.halt();
+    expect(s.forecast.state).toBe('calm');
+  });
 });
 
 describe('solo match', () => {
