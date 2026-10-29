@@ -6,6 +6,7 @@ import { PLAYER_COLORS } from '../shared/players.js';
 import { phoneId } from './identity.js';
 import { GUST_COOLDOWN_S, CONTROLLED_GUST_S } from '../game/wind.js';
 import { WIND_WARNING_S } from '../game/forecast.js';
+import { createHoldButtons, releaseWhenBackgrounded } from './holdButtons.js';
 
 const SIGN_KEY = 'bridge.tiltSign';
 
@@ -65,6 +66,7 @@ function dropSocket() {
 
 // The TV's room is gone once either side drops, so always return to Connect.
 function showProblem(text) {
+  releaseAll(); // tells the TV while the socket is still open, and the buttons are drawn up again
   dropSocket();
   show('screen-connect');
   $('connect-error').textContent = text;
@@ -106,6 +108,7 @@ $('btn-connect').addEventListener('click', async () => {
 
 function onMessage(msg) {
   if (msg.t === 'paired') {
+    releaseAll(); // a fresh pairing (or a reconnect) starts with nothing held: WALK needs a new press
     me = msg.player === 2 ? 2 : 1;
     showBadge(me);
     sendVolume(); // a freshly started TV app plays at full volume until it hears the saved levels
@@ -244,30 +247,14 @@ function enterPlay() {
   }, 33); // ~30 Hz is plenty and keeps Wi-Fi traffic tiny
 }
 
-// A button that is "on" while a finger is on it. Sends on every change, never twice in a row.
-const releases = [];
-function releaseAll() {
-  for (const release of releases) release();
-}
-function holdButton(el, send) {
-  let held = false;
-  releases.push(() => set(false));
-  function set(on) {
-    if (held === on) return;
-    held = on;
-    el.classList.toggle('down', on);
-    send(on);
-  }
-  el.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    set(true);
-  });
-  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => set(false));
-  el.addEventListener('contextmenu', (e) => e.preventDefault());
-}
+// WALK and RUN are held (holdButtons.js), and let go of together when the page goes to the background, the link drops or a
+// fresh pairing starts: a button never comes back still held.
+const holds = createHoldButtons();
+const releaseAll = () => holds.releaseAll();
+releaseWhenBackgrounded(document, window, releaseAll);
 
-holdButton($('btn-walk'), (on) => net?.send({ t: 'walk', on }));
-holdButton($('btn-run'), (on) => net?.send({ t: 'run', on }));
+holds.hold($('btn-walk'), (on) => net?.send({ t: 'walk', on }));
+holds.hold($('btn-run'), (on) => net?.send({ t: 'run', on }));
 
 const jumpBtn = $('btn-jump');
 jumpBtn.addEventListener('pointerdown', (e) => {
