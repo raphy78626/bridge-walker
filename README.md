@@ -8,13 +8,20 @@ the gaps where planks are missing, and don't fall into the canyon. Watch for the
 announced a moment before it hits, so you can lean into it. Beat the par time without falling for three stars.
 Every level picks a new look at random (golden afternoon, misty morning, sunset, moonlit night or a lush green
 valley with pines and a river below), with its own soundscape and its own freshly shaped canyon, and gets a little
-harder: more gaps, stronger and more frequent gusts.
+harder: more gaps, stronger and more frequent gusts, and a faster walk.
+
+Two players? Grab a second phone: **race** each other across twin bridges, or be the **Wind Master** and blow the
+other player off the bridge.
 
 ![Golden afternoon](docs/screenshots/golden-afternoon.jpg)
 
 | Misty morning (first-person view) | Sunset (cinematic view) | Moonlit night |
 |---|---|---|
 | ![Misty morning](docs/screenshots/misty-morning-first-person.jpg) | ![Sunset](docs/screenshots/sunset-cinematic.jpg) | ![Moonlit night](docs/screenshots/moonlit-night.jpg) |
+
+| Green valley (first-person view) | Race: the leader waits for P2 | Wind Master: P2 sends the gusts |
+|---|---|---|
+| ![Green valley](docs/screenshots/green-valley-first-person.jpg) | ![Race](docs/screenshots/race-leader-waits.jpg) | ![Wind Master](docs/screenshots/wind-master.jpg) |
 
 ## What you need
 
@@ -47,11 +54,19 @@ npm run tv
 | Phone | What it does |
 |---|---|
 | Tilt | keep him balanced (watch the meter) |
-| Hold **WALK** / **RUN** | move forward (running is twice as fast but wobblier) |
+| Hold **WALK** / **RUN** | move forward (running is twice as fast but wobblier); both get 5% faster each level, up to +30% |
 | Tap **JUMP** | leap over gaps; a red cloth on the ropes and **GAP AHEAD** warn you |
 | **🎥 VIEW** | switch camera: chase, first person (the horizon tilts as you lean), cinematic |
-| **⏸ Pause** | freeze the game (and the sound); tap **▶ Resume** to carry on |
+| **⏸ Pause** | freeze the game and the sound (the TV dims behind a PAUSED card); tap **▶ Resume** to carry on |
 | **🔊 Sound** | music and sound-effect volume, remembered on your phone |
+
+### On the bridge
+
+- Each level starts on the rock ledge before the bridge: solid ground, where you can't fall. The clock and the wind
+  start with your first step onto the planks.
+- On the bridge you have to **keep moving**. Stop and **KEEP MOVING!** flashes on the TV and your phone buzzes; after
+  2 seconds standing still the bridge starts swaying you off.
+- Fall and you're back on the bridge 1.6 seconds later (just before the gap, if you fell into one).
 
 ### Wind and scoring
 
@@ -61,6 +76,19 @@ npm run tv
   ★★★ = no falls and under par (you'll need to run), ★★ = close, ★ = you made it.
 - Points for speed and clean runs add up across the run. Your best score and time per level, and your best run,
   are saved on the TV.
+
+### Two players
+
+Both phones scan the same QR code (the TV shows **P1** and **P2**), and either phone picks the mode before Start.
+
+- **Race:** twin bridges with the same gaps and the same wind. Every round opens with **3, 2, 1, GO!** (hold WALK
+  through the countdown for a flying start). Falls cost no lives, only time. One camera follows both of you, so the
+  leader can get at most 6 m ahead: there he stops and balances under a **WAIT FOR P2** tag until the other catches
+  up. The last 10 m are a free sprint. First across wins the round; first to 3 rounds wins the match, and each round
+  is the next level.
+- **Wind Master:** one player walks, the other's phone turns into two **GUST** buttons (a gauge shows when the next
+  gust is ready). Every gust gets the same WIND warning, so a good walker can lean into it. The walker scores for
+  crossing; the Wind Master scores 150 for every fall a gust causes. Roles swap every round, 4 rounds in all.
 
 ## Install the LG webOS TV app (optional)
 
@@ -86,21 +114,30 @@ to type the address that `npm run tv` printed.
 - `npm run tv` serves the game (built with Vite + Three.js) and runs a tiny WebSocket relay between the phone and
   the TV. The TV page uses plain HTTP so the TV never shows a certificate warning; the phone page uses HTTPS
   because phones only share motion sensors with secure pages.
-- The TV renders the 3D scene and runs the game. The phone only sends tilt, walk, run, jump and view changes.
+- The TV renders the 3D scene and runs the game: it alone decides falls, lives, scores and rounds. A phone only sends
+  what its player does (tilt, walk, run, jump, gust, view, pause, start), and the server only passes each side the
+  messages it may send.
+- The game runs in fixed 1/120 s steps, so balance, wind and jumps play the same at any frame rate.
+- Dropped connections heal by themselves. A phone that reconnects gets its own player slot back. A TV that reloads
+  gets its room back for 30 s (its phones show *TV reconnecting…* instead of asking for a new QR scan). A phone that
+  goes to the background (another app, the lock button, a call) lets go of WALK and RUN.
 - Built for a weak TV graphics chip (measured on an LG 55UR9050, PowerVR BXE-4-32, 50 Hz panel): lighting on the
   rock is baked once instead of computed per pixel, the sky is pre-rendered per level, the next level's canyon is
-  built ahead in a background worker, and resolution adapts to hold ~40-45 fps. The TV reports its frame rate and
-  any errors to the computer's terminal (`[tv]` lines).
+  built ahead in a background worker, and the TV renders at 70% resolution. That holds about 40 fps in the chase
+  view. A level change is split over two frames and its lighting is built from a tiny copy of the sky, so the win
+  screen doesn't freeze. The TV reports its frame rate, level changes and any errors to the computer's terminal
+  (`[tv]` lines).
 
 ## Develop
 
 ```bash
 npm run dev      # live-reloading dev server (phone https://...:5173, TV http://...:5183/tv.html)
-npm test         # 400 unit tests (Vitest)
-npm run smoke    # pairs a fake TV and phone through a running server
+npm test         # 775 unit tests (Vitest)
+npm run smoke    # pairs a fake TV and two phones through a running server, reconnects one and reloads the TV
 ```
 
-Add `?tv` to the TV page URL on a desktop to preview the lighter TV version of the scene.
+Add `?tv` to the TV page URL on a desktop to preview the lighter TV version of the scene, and `?profile` to make each
+level change wait for the GPU so its logged time is the real cost (it stalls, so only for measuring).
 
 ## Credits
 
@@ -118,6 +155,7 @@ A parent & kid project. Code by us and Claude Code, under the [MIT licence](LICE
 ## Ideas for later
 
 - Play without a computer: move the relay to a cloud host (also removes the phone's certificate warning).
-- Remember pairing, so the phone reconnects without rescanning after the TV app restarts.
+- Remember pairing across a TV app restart (a reload already keeps the phones paired for 30 s).
+- Test on a real Android phone.
 - A pre-rendered video background for an even more photoreal canyon.
 - Submit to the LG Content Store.
